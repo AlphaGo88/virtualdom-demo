@@ -1,0 +1,23 @@
+{
+  "include": ["src/**/*"],
+  "exclude": ["src/**/__tests__/*"],
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+    "noImplicitThis": true,
+    "strict": true,
+    "target": "ESNext",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "paths": {
+      "vdom": ["./src/vdom"]
+    }
+  }
+}
