@@ -1,5 +1,11 @@
-import { h } from 'vdom';
+import { h, defineComponent } from 'vdom';
+import HelloWorld from './HelloWorld';
 
-export default function App() {
-  return <div>{[123, 123]}</div>;
-}
+export default defineComponent(() => {
+  return () => (
+    <div>
+      <h3>🌈</h3>
+      <HelloWorld name='Steve' />
+    </div>
+  );
+});

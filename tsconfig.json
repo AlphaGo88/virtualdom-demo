@@ -8,6 +8,7 @@
     "jsx": "react",
     "jsxFactory": "h",
     "jsxFragmentFactory": "Fragment",
+    "noImplicitAny": false,
     "noImplicitThis": true,
     "strict": true,
     "target": "ESNext",
