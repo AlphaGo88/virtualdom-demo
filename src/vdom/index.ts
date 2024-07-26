@@ -1,5 +1,4 @@
 const VNODE_TYPE = Symbol('vnode');
-const PROPS_KEY = Symbol('props');
 
 type Props = Record<string, any>;
 type VNodeElement = Element | Text;
@@ -23,12 +22,19 @@ interface VNode {
 }
 
 interface SetupFunc {
-  (props: Props): () => VNode;
+  (): (props: Props) => VNode;
 }
 
 interface Signal<T> {
   value: T;
   component: Component | null;
+}
+
+interface SignalGetter<T> {
+  (): T;
+}
+interface SignalSetter<T> {
+  (value: T | ((prev: T) => T)): void;
 }
 
 let Target: Component | null = null;
@@ -42,13 +48,13 @@ let Target: Component | null = null;
  */
 export function h(
   type: string | Function,
-  props: Props = {},
+  props: Props | null,
   ...children: any[]
 ): VNode {
   return {
     $$typeof: VNODE_TYPE,
     type,
-    props,
+    props: props || {},
     children: children.map((child) => toVNode(child)),
   };
 }
@@ -61,6 +67,13 @@ function isVNode(node: any) {
   return typeof node === 'object' && node.$$typeof === VNODE_TYPE;
 }
 
+/**
+ * Updates dom
+ * @param vnode
+ * @param el
+ * @param parent
+ * @returns
+ */
 function patch(vnode: VNode | null, el: VNodeElement | null, parent: Node) {
   if (!vnode) {
     // remove old element if vnode is null
@@ -99,8 +112,8 @@ function patch(vnode: VNode | null, el: VNodeElement | null, parent: Node) {
     (el as Element).tagName.toUpperCase() === type.toUpperCase()
   ) {
     // same tag, update node props and children
-    updateProps(vnode, el as Element);
-    updateChildren(vnode, el as Element);
+    patchProps(vnode, el as Element);
+    patchChildren(vnode, el as Element);
   } else {
     // node type is different, replace the element
     unmountComponentAtNode(el);
@@ -108,30 +121,41 @@ function patch(vnode: VNode | null, el: VNodeElement | null, parent: Node) {
   }
 }
 
-function updateProps(vnode: VNode, el: Element) {
+function patchProps(vnode: VNode, el: Element) {
+  const oldProps = el['_props'] ?? {};
   const props = vnode.props;
-  const all = { ...el[PROPS_KEY], ...props };
-  const newProps = {};
+  const allPropKeys = new Set([
+    ...Object.keys(oldProps),
+    ...Object.keys(props),
+  ]);
 
-  Object.keys(all).forEach((key) => {
-    const ov = el[PROPS_KEY][key];
+  for (const key of allPropKeys.keys()) {
+    const ov = oldProps[key];
     const nv = props[key];
 
-    if (nv == null) {
-      el.removeAttribute(key);
-      return;
-    }
-    if (ov == null || ov !== nv) {
-      el.setAttribute(key, nv);
-    }
-    newProps[key] = all[key];
-  });
+    // bind events
+    if (isEventProp(key)) {
+      const type = key.substring(2).toLowerCase();
 
-  // save new props
-  el[PROPS_KEY] = newProps;
+      if (nv !== ov) el.removeEventListener(type, ov);
+      if (typeof nv === 'function') el.addEventListener(type, nv);
+    } else {
+      if (nv == undefined) {
+        el.removeAttribute(key);
+      } else if (nv !== ov) {
+        el.setAttribute(key, nv);
+      }
+    }
+  }
+
+  el['_props'] = props;
 }
 
-function updateChildren(vnode: VNode, el: Element) {
+function isEventProp(propName: string) {
+  return propName.substring(0, 2) === 'on';
+}
+
+function patchChildren(vnode: VNode, el: Element) {
   const children = vnode.children;
   const nodes: VNodeElement[] = Array.prototype.slice.call(el.childNodes);
   const len = Math.max(children.length, nodes.length);
@@ -142,7 +166,7 @@ function updateChildren(vnode: VNode, el: Element) {
 }
 
 /**
- * This creates dom element
+ * Creates dom element
  * @param vnode
  * @returns
  */
@@ -159,19 +183,17 @@ function createElement(vnode: VNode): VNodeElement {
       ...props,
       children,
     });
-    const vnode = component.render();
 
-    el = createElement(vnode);
+    el = createElement(component.render());
     el['_component'] = component;
     el['_componentCtor'] = component.constructor;
     component.el = el;
   } else {
     el = document.createElement(type);
-    el[PROPS_KEY] = props;
-    for (const child of children) {
-      el.appendChild(createElement(child));
-    }
+    patchProps(vnode, el);
+    patchChildren(vnode, el);
   }
+
   return el;
 }
 
@@ -185,6 +207,11 @@ function unmountComponentAtNode(el: VNodeElement) {
   }
 }
 
+/**
+ *
+ * @param setup - setup function returns a render function
+ * @returns the constructor of the component
+ */
 export function defineComponent(setup: SetupFunc) {
   class Ctor implements Component {
     el: VNodeElement | null;
@@ -192,16 +219,18 @@ export function defineComponent(setup: SetupFunc) {
     render: () => VNode;
 
     constructor(props: Props = {}) {
+      const _render = setup();
+
       this.el = null;
       this.props = props;
-      const _render = setup(this.props);
       this.render = () => {
         Target = this;
-        const vnode = _render();
+        const vnode = _render(this.props);
         Target = null;
         return vnode;
       };
     }
+
     unmount() {}
   }
 
@@ -214,26 +243,30 @@ export function createSignal<T>(initialValue: T) {
     component: null,
   };
 
-  function getter() {
+  const getter: SignalGetter<T> = () => {
     if (Target && !signal.component) {
-      // set component when getter() is first called by render()
+      // associate the component with the signal when getter() is first called by render()
       signal.component = Target;
     }
     return signal.value;
-  }
+  };
 
-  function setter(value: T) {
-    if (Object.is(value, signal.value)) {
+  const setter: SignalSetter<T> = (value) => {
+    const newVal =
+      typeof value === 'function' ? (value as Function)(signal.value) : value;
+
+    if (Object.is(newVal, signal.value)) {
       return;
     }
     const { component } = signal;
-    signal.value = value;
+
+    signal.value = newVal;
     if (component?.el?.parentNode) {
       patch(component.render(), component.el, component.el.parentNode);
     }
-  }
+  };
 
-  return [getter, setter] as [() => T, (value: T) => void];
+  return [getter, setter] as [SignalGetter<T>, SignalSetter<T>];
 }
 
 export function createApp(App: ComponentCtor) {
@@ -246,8 +279,9 @@ export function createApp(App: ComponentCtor) {
       if (!container) {
         throw new Error(`Can't mount app to ${container}`);
       }
-      const vnode = component.render();
-      const rootEl = createElement(vnode);
+
+      const rootEl = createElement(component.render());
+      component.el = rootEl;
       container.innerHTML = '';
       container.appendChild(rootEl);
     },

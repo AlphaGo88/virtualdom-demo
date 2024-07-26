@@ -1,7 +1,5 @@
-import { h, defineComponent, createSignal } from 'vdom';
+import { h, defineComponent } from 'vdom';
 
-export default defineComponent((props) => {
-  const [name, setName] = createSignal('Steve');
-
-  return () => <div>Hello {name()}</div>;
+export default defineComponent(() => {
+  return (props) => <div>Hello {props.name}</div>;
 });
