@@ -5,13 +5,17 @@ import Counter from './Counter';
 export default defineComponent(() => {
   const [name, setName] = createSignal('Steve');
 
-  // setTimeout(() => setName('Jobs'), 3000);
-
   return () => (
     <div>
       <h3>🌈</h3>
       <HelloWorld name={name()} />
       <Counter />
+      <ul>
+        <li>1</li>
+        <li>2</li>
+        <li>3</li>
+        <li>4</li>
+      </ul>
     </div>
   );
 });

@@ -1,16 +1,16 @@
 const VNODE_TYPE = Symbol('vnode');
 const COMPONENT_TYPE = Symbol('component');
 
-type Props = object;
+type Props = Record<string, any>;
 
 interface VNode {
   $$typeof: Symbol;
-  type: string | ComponentCtor;
+  type: string | Component;
   props: Props;
   children: any[];
 }
 
-interface Component {
+interface ComponentInstance {
   $$typeof: Symbol;
   props: Props;
   node: CTreeNode | null;
@@ -18,15 +18,15 @@ interface Component {
   unmount: () => void;
 }
 
-interface ComponentCtor {
-  new (props?: Props): Component;
+interface Component {
+  new (props?: Props): ComponentInstance;
 }
 
 type CTreeNodeElement = Element | Text | Comment;
 
 // node of component tree
 interface CTreeNode {
-  element: Component | CTreeNodeElement;
+  element: ComponentInstance | CTreeNodeElement;
   props: Props;
   parent: CTreeNode | null;
   children: CTreeNode[];
@@ -38,7 +38,7 @@ interface SetupFunc {
 
 interface Signal<T> {
   value: T;
-  component: Component | null;
+  component: ComponentInstance | null;
 }
 
 interface SignalGetter<T> {
@@ -46,10 +46,10 @@ interface SignalGetter<T> {
 }
 
 interface SignalSetter<T> {
-  (value: T | ((prev?: T) => T)): T;
+  (value: T | ((prev: T) => T)): T;
 }
 
-let Target: Component | null = null;
+let Target: ComponentInstance | null = null;
 
 /**
  * Jsx is transformed into h funcition
@@ -59,7 +59,7 @@ let Target: Component | null = null;
  * @returns
  */
 export function h(
-  type: string | ComponentCtor,
+  type: string | Component,
   props: Props | null,
   ...children: any[]
 ): VNode {
@@ -81,7 +81,7 @@ function isVNode(value: any) {
  * @returns component constructor
  */
 export function defineComponent(setup: SetupFunc) {
-  class Ctor implements Component {
+  class Component implements ComponentInstance {
     declare $$typeof: Symbol;
     declare props: Props;
     declare node: CTreeNode | null;
@@ -102,7 +102,7 @@ export function defineComponent(setup: SetupFunc) {
     }
     unmount() {}
   }
-  return Ctor as ComponentCtor;
+  return Component;
 }
 
 function isComponent(value: any) {
@@ -114,33 +114,26 @@ function patch(vnode: any, node: CTreeNode, parent: CTreeNode) {
     ? ''
     : (node.element as CTreeNodeElement).nodeType;
 
-  // both are empty nodes
-  if (vnode == null && nodeType === Node.COMMENT_NODE) {
-    return;
-  }
-
-  // both are text nodes
-  if (!isVNode(vnode) && nodeType === Node.TEXT_NODE) {
-    (node.element as Text).nodeValue = `${vnode}`;
-    return;
-  }
-
-  if (isVNode(vnode)) {
+  if (!isVNode(vnode)) {
+    if (vnode == null && nodeType === Node.COMMENT_NODE) {
+      // both are empty nodes, nothing to do
+    } else if (nodeType === Node.TEXT_NODE) {
+      // both are text nodes
+      (node.element as Text).nodeValue = `${vnode}`;
+    } else {
+      replaceNode(createNodeFromVNode(vnode), node, parent);
+    }
+  } else {
     const { type, props, children } = vnode as VNode;
 
-    // same component type
     if (isComponent(node.element) && node.element.constructor === type) {
-      const component = node.element as Component;
+      const component = node.element as ComponentInstance;
       component.props = {
         ...props,
         children,
       };
       patch(component.render(), node.children[0], node);
-      return;
-    }
-
-    // same html tag
-    if (
+    } else if (
       typeof type === 'string' &&
       nodeType === Node.ELEMENT_NODE &&
       type.toUpperCase() === (node.element as Element).tagName.toUpperCase()
@@ -157,12 +150,11 @@ function patch(vnode: any, node: CTreeNode, parent: CTreeNode) {
           patch(children[i], childNodes[i], node);
         }
       }
-      return;
+    } else {
+      // now node type is different
+      replaceNode(createNodeFromVNode(vnode), node, parent);
     }
   }
-
-  // now node type should be different
-  replaceNode(createNodeFromVNode(vnode), node, parent);
 }
 
 function updateDOMProps(props: Props | null, node: CTreeNode) {
@@ -195,7 +187,10 @@ function isEventProp(propName: string) {
   return propName.substring(0, 2) === 'on';
 }
 
-function createNode(element: Component | CTreeNodeElement, props?: Props) {
+function createNode(
+  element: ComponentInstance | CTreeNodeElement,
+  props?: Props
+) {
   return {
     element,
     props: props ?? {},
@@ -209,13 +204,12 @@ function createNodeFromVNode(vnode: any) {
   if (vnode == null) {
     return createNode(document.createComment(''));
   }
-
   // text node
   if (!isVNode(vnode)) {
     return createNode(document.createTextNode(`${vnode}`));
   }
-
   const { type, props, children } = vnode as VNode;
+  let node: CTreeNode;
 
   // component node
   if (typeof type === 'function') {
@@ -223,19 +217,17 @@ function createNodeFromVNode(vnode: any) {
       ...props,
       children,
     });
-    const node = createNode(component);
-
+    node = createNode(component);
+    component.node = node;
     appendNode(createNodeFromVNode(component.render()), node);
-    return node;
+  } else {
+    // element node
+    node = createNode(document.createElement(type));
+    updateDOMProps(props, node);
+    children.forEach((child) => {
+      appendNode(createNodeFromVNode(child), node);
+    });
   }
-
-  // element node
-  const node = createNode(document.createElement(type));
-
-  updateDOMProps(props, node);
-  children.forEach((child) => {
-    appendNode(createNodeFromVNode(child), node);
-  });
   return node;
 }
 
@@ -245,8 +237,8 @@ function removeNode(node: CTreeNode, parent: CTreeNode) {
 
   node.parent = null;
   parent.children.splice(parent.children.indexOf(node), 1);
-  if (parentEl) {
-    parentEl.removeChild(el!);
+  if (parentEl && el) {
+    parentEl.removeChild(el);
   }
 }
 
@@ -256,8 +248,8 @@ function appendNode(node: CTreeNode, parent: CTreeNode) {
 
   node.parent = parent;
   parent.children.push(node);
-  if (parentEl) {
-    parentEl.appendChild(el!);
+  if (parentEl && el) {
+    parentEl.appendChild(el);
   }
 }
 
@@ -269,8 +261,8 @@ function replaceNode(node: CTreeNode, oldNode: CTreeNode, parent: CTreeNode) {
   node.parent = parent;
   oldNode.parent = null;
   parent.children.splice(parent.children.indexOf(oldNode), 1, node);
-  if (parentEl) {
-    parentEl.replaceChild(el!, oldEl!);
+  if (parentEl && el && oldEl) {
+    parentEl.replaceChild(el, oldEl);
   }
 }
 
@@ -283,7 +275,6 @@ function findDOMElement(node: CTreeNode, up: boolean = false) {
     }
     return ptr ? (ptr.element as Element) : null;
   }
-
   while (ptr && isComponent(ptr.element)) {
     ptr = ptr.children[0];
   }
@@ -295,7 +286,6 @@ export function createSignal<T>(initialValue: T) {
     value: initialValue,
     component: null,
   };
-
   const getter: SignalGetter<T> = () => {
     if (Target && !signal.component) {
       // associate the component with the signal when getter() is first called by render()
@@ -303,26 +293,24 @@ export function createSignal<T>(initialValue: T) {
     }
     return signal.value;
   };
-
   const setter: SignalSetter<T> = (value) => {
+    const component = signal.component;
     const newVal: T =
       typeof value === 'function' ? (value as Function)(signal.value) : value;
 
     if (!Object.is(newVal, signal.value)) {
-      const { component } = signal;
-
       signal.value = newVal;
-      if (component?.node?.parent) {
-        patch(component.render(), component.node, component.node.parent);
+      if (component?.node) {
+        patch(component.render(), component.node.children[0], component.node);
       }
     }
     return newVal;
   };
 
-  return [getter as SignalGetter<T>, setter as SignalSetter<T>];
+  return [getter, setter] as [SignalGetter<T>, SignalSetter<T>];
 }
 
-export function createApp(App: ComponentCtor) {
+export function createApp(App: Component) {
   const appComponent = new App();
 
   return {
@@ -336,6 +324,7 @@ export function createApp(App: ComponentCtor) {
       const containerNode = createNode(container);
       const appNode = createNode(appComponent);
 
+      appComponent.node = appNode;
       appendNode(appNode, containerNode);
       appendNode(createNodeFromVNode(appComponent.render()), appNode);
     },
