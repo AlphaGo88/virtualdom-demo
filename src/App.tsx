@@ -5,9 +5,14 @@ import Counter from './Counter';
 export default defineComponent(() => {
   const [name, setName] = createSignal('Steve');
 
+  function handleInput(event: Event) {
+    setName((event.target as HTMLInputElement).value);
+  }
+
   return () => (
-    <div>
+    <div className='abc'>
       <h3>🌈</h3>
+      <input type='text' value={name()} onInput={handleInput} />
       <HelloWorld name={name()} />
       <Counter />
       <ul>
