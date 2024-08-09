@@ -1,6 +1,3 @@
-const COMPONENT_TYPE = Symbol('component');
-const VNODE_TYPE = Symbol('vnode');
-
 type Props = Record<string, any>;
 
 export namespace JSX {
@@ -15,20 +12,14 @@ export namespace JSX {
   export type Node = Element | number | string | boolean | null | undefined;
 }
 
-interface VNode extends JSX.Element {
-  element: ComponentInstance | Element | Text | Comment;
-  parent: VNode | null;
-  childNodes: VNode[];
-}
+type DOMNode = Element | Text | Comment;
 
 interface ComponentInstance {
-  $$typeof: Symbol;
   props: Props;
-  vnode: VNode | null;
-  _renderToJSXNode: (props: Props) => JSX.Node;
-  renderToJSXNode: () => JSX.Node;
-  render: () => void;
-  patch: () => void;
+  onMountCallbacks: Function[];
+  onUnmountCallbacks: Function[];
+  render: () => JSX.Node;
+  triggerMount: () => void;
   unmount: () => void;
 }
 
@@ -53,8 +44,9 @@ interface SignalSetter<T> {
   (value: T | ((prev: T) => T)): T;
 }
 
-let Target: Function | null = null;
-const patchQueue: ComponentInstance[] = [];
+let currentTargetFn: Function | null = null;
+let currentSetupInstance: ComponentInstance | null = null;
+let patchQueue: CompositeVNode[] = [];
 
 /**
  * Jsx is transformed into h funcition
@@ -78,8 +70,12 @@ export function h(
   };
 }
 
-function isJSXElement(value: any) {
-  return value?.$$typeof === JSX.ELEMENT_TYPE;
+function isJSXElement(value: unknown) {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    value['$$typeof'] === JSX.ELEMENT_TYPE
+  );
 }
 
 /**
@@ -89,247 +85,341 @@ function isJSXElement(value: any) {
  */
 export function defineComponent(setup: SetupFunc) {
   class Component implements ComponentInstance {
-    declare $$typeof: Symbol;
     declare props: Props;
-    declare vnode: VNode | null;
-    declare _renderToJSXNode: (props: Props) => JSX.Node;
+    declare onMountCallbacks: Function[];
+    declare onUnmountCallbacks: Function[];
+    #render: (props: Props) => JSX.Node;
 
-    constructor(props?: Props) {
-      this.$$typeof = COMPONENT_TYPE;
-      this.props = props ?? {};
-      this.vnode = null;
-      this._renderToJSXNode = setup.call(this);
+    constructor(props: Props = {}) {
+      this.props = props;
+      this.onMountCallbacks = [];
+      this.onUnmountCallbacks = [];
+
+      currentSetupInstance = this;
+      this.#render = setup();
+      currentSetupInstance = null;
     }
-    renderToJSXNode() {
-      Target = this.render.bind(this);
-      const jsxNode = this._renderToJSXNode(this.props);
-      Target = null;
-      return jsxNode;
-    }
+
     render() {
-      enqueuePatch(this);
+      return this.#render(this.props);
     }
-    patch() {
-      if (this.vnode) {
-        patch(this.renderToJSXNode(), this.vnode.childNodes[0], this.vnode);
-      }
+
+    triggerMount() {
+      const callbacks = this.onMountCallbacks;
+
+      this.onMountCallbacks = [];
+      callbacks.forEach((cb) => cb());
     }
-    unmount() {}
+
+    unmount() {
+      const callbacks = this.onUnmountCallbacks;
+
+      this.onUnmountCallbacks = [];
+      callbacks.forEach((cb) => cb());
+    }
   }
+
   return Component;
 }
 
-function isComponent(value: any) {
-  return value?.$$typeof === COMPONENT_TYPE;
+function initVNode(element: JSX.Node) {
+  if (
+    isJSXElement(element) &&
+    typeof (element as JSX.Element).type === 'function'
+  ) {
+    return new CompositeVNode(element as JSX.Element);
+  }
+
+  return new DOMVNode(element);
 }
 
-function enqueuePatch(component: ComponentInstance) {
-  if (!patchQueue.includes(component)) {
-    patchQueue.push(component);
+class CompositeVNode {
+  #element: JSX.Element;
+  #renderedVNode: CompositeVNode | DOMVNode | null;
+  #compInstance: ComponentInstance | null;
+  #enqueuePatch: () => void;
 
-    Promise.resolve().then(() => {
-      const pq = patchQueue.slice();
+  constructor(element: JSX.Element) {
+    this.#element = element;
+    this.#renderedVNode = null;
+    this.#compInstance = null;
+    this.#enqueuePatch = () => {
+      enqueuePatch(this);
+    };
+  }
 
-      patchQueue.splice(0, patchQueue.length);
-      pq.forEach((c) => c.patch());
-    });
+  get element() {
+    return this.#element;
+  }
+
+  getDOMNode(): DOMNode | null {
+    return this.#renderedVNode?.getDOMNode() ?? null;
+  }
+
+  mount(): DOMNode {
+    const { type, props } = this.element;
+    const compInstance = new (type as Component)(props);
+
+    this.#compInstance = compInstance;
+    currentTargetFn = this.#enqueuePatch;
+    const renderedElement = compInstance.render();
+
+    currentTargetFn = null;
+    this.#renderedVNode = initVNode(renderedElement);
+
+    const node = this.#renderedVNode.mount();
+    compInstance.triggerMount();
+    return node;
+  }
+
+  unmount() {
+    this.#compInstance?.unmount();
+    this.#renderedVNode?.unmount();
+  }
+
+  receive(props: Props) {
+    this.element.props = props;
+    this.#compInstance!.props = props;
+    this.patch();
+  }
+
+  patch() {
+    const compInstance = this.#compInstance!;
+    const renderedVNode = this.#renderedVNode!;
+    const renderedElement = renderedVNode.element;
+    const node = renderedVNode.getDOMNode()!;
+    const nextRenderedElement = compInstance.render();
+
+    if (isNullElement(renderedElement) && isNullElement(nextRenderedElement)) {
+      return;
+    }
+
+    if (isTextElement(renderedElement) && isTextElement(nextRenderedElement)) {
+      (renderedVNode as DOMVNode).element = nextRenderedElement;
+      (node as Text).nodeValue = `${nextRenderedElement}`;
+      return;
+    }
+
+    if (isSameElementType(renderedElement, nextRenderedElement)) {
+      renderedVNode.receive((nextRenderedElement as JSX.Element).props);
+      return;
+    }
+
+    renderedVNode.unmount();
+    const nextRenderedVNode = initVNode(nextRenderedElement);
+    const nextNode = nextRenderedVNode.mount();
+
+    this.#renderedVNode = nextRenderedVNode;
+    node.parentNode!.replaceChild(nextNode, node);
   }
 }
 
-function patch(jsxNode: JSX.Node, vnode: VNode, parent: VNode) {
-  if (!isJSXElement(jsxNode)) {
-    if (
-      (jsxNode == null || typeof jsxNode === 'boolean') &&
-      vnode.type === 'null'
-    ) {
-      // nothing to do
-    } else if (
-      jsxNode != null &&
-      typeof jsxNode !== 'boolean' &&
-      vnode.type === 'text'
-    ) {
-      const text = `${jsxNode}`;
+class DOMVNode {
+  #element: JSX.Node;
+  #renderedChildren: (CompositeVNode | DOMVNode)[];
+  #node: DOMNode | null;
 
-      if (vnode.props.text !== text) {
-        vnode.props.text = text;
-        (vnode.element as Text).nodeValue = text;
-      }
+  constructor(element: JSX.Node) {
+    this.#element = element;
+    this.#renderedChildren = [];
+    this.#node = null;
+  }
+
+  get element() {
+    return this.#element;
+  }
+
+  set element(value: JSX.Node) {
+    this.#element = value;
+  }
+
+  getDOMNode() {
+    return this.#node;
+  }
+
+  mount() {
+    const element = this.element;
+    let node: DOMNode;
+
+    if (isNullElement(element)) {
+      node = document.createComment('');
+    } else if (isTextElement(element)) {
+      node = document.createTextNode(`${element}`);
     } else {
-      replaceVNode(createVNodeFromJSXNode(jsxNode), vnode, parent);
+      const { type, props } = element as JSX.Element;
+      const { children, ..._props } = props;
+
+      node = document.createElement(type as string);
+      updateNodeProps(node, _props);
+
+      const renderedChildren = (children as JSX.Node[]).map(initVNode);
+      this.#renderedChildren = renderedChildren;
+
+      // append child dom nodes
+      const childNodes = renderedChildren.map((child) => child.mount());
+      childNodes.forEach((childNode) => node.appendChild(childNode));
     }
-  } else {
-    const { type, props } = jsxNode as JSX.Element;
 
-    if (type === vnode.type) {
-      if (typeof type === 'function') {
-        const component = vnode.element as ComponentInstance;
+    this.#node = node;
+    return node;
+  }
 
-        component.props = props;
-        patch(component.renderToJSXNode(), vnode.childNodes[0], vnode);
-      } else {
-        const { childNodes } = vnode;
-        const { children, ...rest } = props;
+  unmount() {
+    this.#renderedChildren.forEach((child) => child.unmount());
+  }
 
-        patchDOMProps(rest, vnode);
-        for (let i = 0; i < Math.max(children.length, childNodes.length); i++) {
-          if (i >= children.length) {
-            removeVNode(childNodes[i], parent);
-          } else if (i >= childNodes.length) {
-            appendVNode(createVNodeFromJSXNode(children[i]), parent);
-          } else {
-            patch(children[i], childNodes[i], vnode);
-          }
-        }
+  receive(props: Props) {
+    const element = this.element as JSX.Element;
+    const prevProps = element.props;
+
+    element.props = props;
+    updateNodeProps(this.#node as Element, props, prevProps);
+
+    const prevChildren = prevProps.children as JSX.Node[];
+    const nextChildren = props.children as JSX.Node[];
+    const prevRenderedChildren = this.#renderedChildren;
+    const nextRenderedChildren: (CompositeVNode | DOMVNode)[] = [];
+    const opQueue: {
+      type: string;
+      node: DOMNode;
+      prevNode?: DOMNode;
+    }[] = [];
+
+    for (let i = 0; i < nextChildren.length; i++) {
+      const prevChild = prevChildren[i];
+      const nextChild = nextChildren[i];
+      const prevRenderedChild = prevRenderedChildren[i];
+      const prevNode = prevRenderedChild.getDOMNode()!;
+
+      if (isNullElement(prevChild) && isNullElement(nextChild)) {
+        nextRenderedChildren.push(prevRenderedChild);
+        continue;
       }
-    } else {
-      replaceVNode(createVNodeFromJSXNode(jsxNode), vnode, parent);
+
+      if (isTextElement(prevChild) && isTextElement(nextChild)) {
+        (prevRenderedChild as DOMVNode).element = nextChild;
+        (prevNode as Text).nodeValue = `${nextChild}`;
+        nextRenderedChildren.push(prevRenderedChild);
+        continue;
+      }
+
+      if (isSameElementType(prevChild, nextChild)) {
+        prevRenderedChild.receive((nextChild as JSX.Element).props);
+        nextRenderedChildren.push(prevRenderedChild);
+        continue;
+      }
+
+      const nextRenderedChild = initVNode(nextChildren[i]);
+      const node = nextRenderedChild.mount();
+
+      if (prevRenderedChild) {
+        prevRenderedChild.unmount();
+        opQueue.push({ type: 'REPLACE', node, prevNode });
+      } else {
+        opQueue.push({ type: 'ADD', node });
+      }
+      nextRenderedChildren.push(nextRenderedChild);
+    }
+
+    for (let j = nextChildren.length; j < prevChildren.length; j++) {
+      const prevRenderedChild = prevRenderedChildren[j];
+      const node = prevRenderedChild.getDOMNode()!;
+
+      prevRenderedChild.unmount();
+      opQueue.push({ type: 'REMOVE', node });
+    }
+
+    this.#renderedChildren = nextRenderedChildren;
+    const node = this.#node!;
+
+    while (opQueue.length > 0) {
+      var op = opQueue.shift()!;
+
+      switch (op.type) {
+        case 'ADD':
+          node.appendChild(op.node);
+          break;
+        case 'REPLACE':
+          node.replaceChild(op.node, op.prevNode as DOMNode);
+          break;
+        case 'REMOVE':
+          node.removeChild(op.node);
+          break;
+      }
     }
   }
 }
 
-function patchDOMProps(props: Props, vnode: VNode) {
-  const el = vnode.element as Element;
-  const tagName = el.tagName;
-  const oldProps = vnode.props;
-  const allKeys = new Set([...Object.keys(oldProps), ...Object.keys(props)]);
+function isSameElementType(prevElement: JSX.Node, nextElement: JSX.Node) {
+  return (
+    isJSXElement(prevElement) &&
+    isJSXElement(nextElement) &&
+    (prevElement as JSX.Element).type === (nextElement as JSX.Element).type
+  );
+}
 
-  for (const key of allKeys.keys()) {
-    const nv = props[key];
-    const ov = oldProps[key];
+function isNullElement(element: JSX.Node) {
+  return element === null || typeof element === 'boolean';
+}
 
-    if (nv != ov) {
-      if (key === 'className') {
-        el.className = nv;
-      } else if (isEventProp(key)) {
-        const type = key.substring(2).toLowerCase();
+function isTextElement(element: JSX.Node) {
+  return !isNullElement(element) && !isJSXElement(element);
+}
 
-        el.removeEventListener(type, ov);
-        el.addEventListener(type, nv);
-      } else if (tagName === 'TEXTAREA' && key === 'value') {
-        (el as HTMLTextAreaElement).innerText = nv;
-      } else if (tagName === 'INPUT' && key === 'checked') {
-        (el as HTMLInputElement).checked = nv;
-      } else if (['SELECT', 'INPUT'].includes(tagName) && key === 'value') {
-        (el as HTMLSelectElement | HTMLInputElement).value = nv;
+function updateNodeProps(node: Element, props: Props, prevProps: Props = {}) {
+  const tagName = node.tagName;
+  const allPropNames = new Set([
+    ...Object.keys(prevProps),
+    ...Object.keys(props),
+  ]);
+
+  for (const propName of allPropNames.keys()) {
+    const prevValue = prevProps[propName];
+    const value = props[propName];
+
+    if (Object.is(prevValue, value)) continue;
+
+    if (propName === 'className') {
+      node.className = value;
+    } else if (isEventProp(propName)) {
+      const type = propName.substring(2).toLowerCase();
+
+      if (prevValue) {
+        node.removeEventListener(type, prevValue);
+      }
+      if (value) {
+        node.addEventListener(type, value);
+      }
+    } else if (tagName === 'TEXTAREA' && propName === 'value') {
+      (node as HTMLTextAreaElement).innerText = value;
+    } else if (tagName === 'INPUT' && propName === 'checked') {
+      (node as HTMLInputElement).checked = value;
+    } else if (['SELECT', 'INPUT'].includes(tagName) && propName === 'value') {
+      (node as HTMLSelectElement | HTMLInputElement).value = value;
+    } else {
+      if (value === undefined) {
+        node.removeAttribute(propName);
       } else {
-        if (nv == undefined) {
-          el.removeAttribute(key);
-        } else {
-          el.setAttribute(key, nv);
-        }
+        node.setAttribute(propName, value);
       }
     }
   }
-  vnode.props = props;
 }
 
 function isEventProp(propName: string) {
   return propName.substring(0, 2) === 'on';
 }
 
-function createVNode(
-  type: string | Component,
-  element: ComponentInstance | Element | Text | Comment,
-  props?: Props
-) {
-  return {
-    $$typeof: VNODE_TYPE,
-    type,
-    element,
-    props: props ?? {},
-    parent: null,
-    childNodes: [],
-  } as VNode;
-}
+function enqueuePatch(vnode: CompositeVNode) {
+  if (!patchQueue.includes(vnode)) {
+    patchQueue.push(vnode);
 
-function createVNodeFromJSXNode(jsxNode: JSX.Node) {
-  if (jsxNode == null || typeof jsxNode === 'boolean') {
-    return createVNode('null', document.createComment(''));
-  }
-  if (!isJSXElement(jsxNode)) {
-    const text = `${jsxNode}`;
-    return createVNode('text', document.createTextNode(text), { text });
-  }
-
-  let vnode: VNode;
-  const { type, props } = jsxNode as JSX.Element;
-  const { children, ..._props } = props;
-
-  if (typeof type === 'function') {
-    const component = new type(props);
-
-    vnode = createVNode(type, component);
-    component.vnode = vnode;
-    appendVNode(createVNodeFromJSXNode(component.renderToJSXNode()), vnode);
-  } else {
-    // html element node
-    vnode = createVNode(type, document.createElement(type));
-    patchDOMProps(_props, vnode);
-    (children as JSX.Node[]).forEach((child) => {
-      appendVNode(createVNodeFromJSXNode(child), vnode);
+    Promise.resolve().then(() => {
+      while (patchQueue.length > 0) {
+        patchQueue.shift()!.patch();
+      }
     });
   }
-  return vnode;
-}
-
-function appendVNode(vnode: VNode, parent: VNode) {
-  const el = findDOMElement(vnode);
-  const parentEl = findDOMElement(parent, true);
-
-  vnode.parent = parent;
-  parent.childNodes.push(vnode);
-  if (parentEl && el) {
-    parentEl.appendChild(el);
-  }
-}
-
-function removeVNode(vnode: VNode, parent: VNode) {
-  const el = findDOMElement(vnode);
-  const parentEl = findDOMElement(parent, true);
-
-  vnode.parent = null;
-  parent.childNodes.splice(parent.childNodes.indexOf(vnode), 1);
-  if (parentEl && el) {
-    parentEl.removeChild(el);
-  }
-  unmountComponentAtVNode(vnode);
-}
-
-function replaceVNode(vnode: VNode, oldVNode: VNode, parent: VNode) {
-  const el = findDOMElement(vnode);
-  const oldEl = findDOMElement(oldVNode);
-  const parentEl = findDOMElement(parent, true);
-
-  vnode.parent = parent;
-  oldVNode.parent = null;
-  parent.childNodes.splice(parent.childNodes.indexOf(oldVNode), 1, vnode);
-  if (parentEl && el && oldEl) {
-    parentEl.replaceChild(el, oldEl);
-  }
-  unmountComponentAtVNode(oldVNode);
-}
-
-function unmountComponentAtVNode(vnode: VNode) {
-  if (typeof vnode.type === 'function') {
-    (vnode.element as ComponentInstance).unmount();
-  }
-  vnode.childNodes.forEach((child) => unmountComponentAtVNode(child));
-}
-
-function findDOMElement(node: VNode, up: boolean = false) {
-  let ptr: VNode | null = node;
-
-  if (up) {
-    while (ptr && isComponent(ptr.element)) {
-      ptr = ptr.parent;
-    }
-    return ptr ? (ptr.element as Element) : null;
-  }
-
-  while (ptr && isComponent(ptr.element)) {
-    ptr = ptr.childNodes[0];
-  }
-  return ptr ? (ptr.element as Element | Text | Comment) : null;
 }
 
 export function createSignal<T>(initialValue: T) {
@@ -337,12 +427,14 @@ export function createSignal<T>(initialValue: T) {
     value: initialValue,
     listeners: [],
   };
+
   const getter: SignalGetter<T> = () => {
-    if (Target && !signal.listeners.includes(Target)) {
-      signal.listeners.push(Target);
+    if (currentTargetFn && !signal.listeners.includes(currentTargetFn)) {
+      signal.listeners.push(currentTargetFn);
     }
     return signal.value;
   };
+
   const setter: SignalSetter<T> = (value) => {
     const newVal: T =
       typeof value === 'function' ? (value as Function)(signal.value) : value;
@@ -357,31 +449,33 @@ export function createSignal<T>(initialValue: T) {
   return [getter, setter] as [SignalGetter<T>, SignalSetter<T>];
 }
 
-export function createApp(App: Component) {
-  const appComponent = new App();
+export function onMount(fn: Function) {
+  currentSetupInstance?.onMountCallbacks.push(fn);
+}
 
-  return {
-    mount(selector: string) {
-      const container = document.querySelector(selector);
+export function onUnmount(fn: Function) {
+  currentSetupInstance?.onUnmountCallbacks.push(fn);
+}
 
-      if (!container || container.nodeType !== Node.ELEMENT_NODE) {
-        throw new Error(`Can't mount app to ${container}`);
-      }
-      container.innerHTML = '';
+export function unmount(containerNode: Element) {
+  const node = containerNode.childNodes[0];
 
-      const containerVNode = createVNode(
-        (container as Element).tagName.toLowerCase(),
-        container
-      );
-      const appVNode = createVNode(App, appComponent);
+  if (node) {
+    const rootVNode = node['_internalVNode'];
 
-      appComponent.vnode = appVNode;
-      appendVNode(appVNode, containerVNode);
-      appendVNode(
-        createVNodeFromJSXNode(appComponent.renderToJSXNode()),
-        appVNode
-      );
-    },
-    unmount() {},
-  };
+    if (rootVNode) {
+      (rootVNode as CompositeVNode | DOMVNode).unmount();
+    }
+  }
+  containerNode.innerHTML = '';
+}
+
+export function mount(element: JSX.Element, containerNode: Element) {
+  unmount(containerNode);
+
+  const rootVNode = initVNode(element);
+  const node = rootVNode.mount();
+
+  containerNode.appendChild(node);
+  node['_internalVNode'] = rootVNode;
 }
