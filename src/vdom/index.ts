@@ -1,5 +1,3 @@
-type Props = Record<string, any>;
-
 export namespace JSX {
   export const ELEMENT_TYPE = Symbol('jsx.element');
 
@@ -12,28 +10,37 @@ export namespace JSX {
   export type Node = Element | number | string | boolean | null | undefined;
 }
 
-type DOMNode = Element | Text | Comment;
+type DOMNode = Element | Text | DocumentFragment;
+
+interface Props {
+  [propName: string]: any;
+  children?: JSX.Node[];
+}
+
+interface SetupFunc {
+  (props: Props): () => JSX.Node;
+}
 
 interface ComponentInstance {
   props: Props;
-  onMountCallbacks: Function[];
-  onUnmountCallbacks: Function[];
+  vnode: CompositeVNode | null;
   render: () => JSX.Node;
+  receive: (props: Props) => boolean;
+  onMount: (fn: Function) => void;
+  onUpdate: (fn: Function) => void;
+  onUnmount: (fn: Function) => void;
   triggerMount: () => void;
+  triggerUpdate: () => void;
   unmount: () => void;
 }
 
 interface Component {
-  new (props?: Props): ComponentInstance;
-}
-
-interface SetupFunc {
-  (): (props: Props) => JSX.Node;
+  new (props: Props): ComponentInstance;
 }
 
 interface Signal<T> {
   value: T;
-  listeners: Function[];
+  compInstance: ComponentInstance;
 }
 
 interface SignalGetter<T> {
@@ -44,9 +51,8 @@ interface SignalSetter<T> {
   (value: T | ((prev: T) => T)): T;
 }
 
-let currentTargetFn: Function | null = null;
 let currentSetupInstance: ComponentInstance | null = null;
-let patchQueue: CompositeVNode[] = [];
+const patchQueue: CompositeVNode[] = [];
 
 /**
  * Jsx is transformed into h funcition
@@ -57,23 +63,25 @@ let patchQueue: CompositeVNode[] = [];
  */
 export function h(
   type: string | Component,
-  props: Props | null,
+  props: Props = {},
   ...children: JSX.Node[]
 ): JSX.Element {
   return {
     $$typeof: JSX.ELEMENT_TYPE,
     type,
     props: {
-      ...(props ?? {}),
+      ...props,
       children,
     },
   };
 }
 
+export const Fragment = 'jsx.fragment';
+
 function isJSXElement(value: unknown) {
   return (
-    value !== null &&
     typeof value === 'object' &&
+    value !== null &&
     value['$$typeof'] === JSX.ELEMENT_TYPE
   );
 }
@@ -85,37 +93,75 @@ function isJSXElement(value: unknown) {
  */
 export function defineComponent(setup: SetupFunc) {
   class Component implements ComponentInstance {
-    declare props: Props;
-    declare onMountCallbacks: Function[];
-    declare onUnmountCallbacks: Function[];
-    #render: (props: Props) => JSX.Node;
+    props: Props;
+    vnode: CompositeVNode | null;
+    private onMountCallbacks: Function[];
+    private onUpdateCallbacks: Function[];
+    private onUnmountCallbacks: Function[];
+    private _render: () => JSX.Node;
 
     constructor(props: Props = {}) {
       this.props = props;
+      this.vnode = null;
       this.onMountCallbacks = [];
+      this.onUpdateCallbacks = [];
       this.onUnmountCallbacks = [];
 
       currentSetupInstance = this;
-      this.#render = setup();
+      this._render = setup(props);
       currentSetupInstance = null;
     }
 
     render() {
-      return this.#render(this.props);
+      return this._render();
+    }
+
+    receive(props: Props) {
+      let changed = false;
+      let oldValue: any, newValue: any;
+
+      Object.keys(this.props).forEach((propName) => {
+        oldValue = this.props[propName];
+        newValue = props[propName];
+
+        if (!Object.is(oldValue, newValue)) {
+          changed = true;
+          this.props[propName] = newValue;
+        }
+      });
+
+      return changed;
+    }
+
+    onMount(fn: Function) {
+      this.onMountCallbacks.push(fn);
+    }
+
+    onUpdate(fn: Function) {
+      this.onUpdateCallbacks.push(fn);
+    }
+
+    onUnmount(fn: Function) {
+      this.onUnmountCallbacks.push(fn);
     }
 
     triggerMount() {
-      const callbacks = this.onMountCallbacks;
+      this.runCallbacks(this.onMountCallbacks);
+    }
 
-      this.onMountCallbacks = [];
-      callbacks.forEach((cb) => cb());
+    triggerUpdate() {
+      this.runCallbacks(this.onUpdateCallbacks);
     }
 
     unmount() {
-      const callbacks = this.onUnmountCallbacks;
+      this.runCallbacks(this.onUnmountCallbacks);
+    }
 
-      this.onUnmountCallbacks = [];
-      callbacks.forEach((cb) => cb());
+    private runCallbacks(callbacks: Function[]) {
+      while (callbacks.length) {
+        const fn = callbacks.shift()!;
+        fn();
+      }
     }
   }
 
@@ -134,107 +180,91 @@ function initVNode(element: JSX.Node) {
 }
 
 class CompositeVNode {
-  #element: JSX.Element;
-  #renderedVNode: CompositeVNode | DOMVNode | null;
-  #compInstance: ComponentInstance | null;
-  #enqueuePatch: () => void;
+  element: JSX.Element;
+  private renderedVNode: CompositeVNode | DOMVNode | null;
+  private compInstance: ComponentInstance | null;
 
   constructor(element: JSX.Element) {
-    this.#element = element;
-    this.#renderedVNode = null;
-    this.#compInstance = null;
-    this.#enqueuePatch = () => {
-      enqueuePatch(this);
-    };
+    this.element = element;
+    this.renderedVNode = null;
+    this.compInstance = null;
   }
 
-  get element() {
-    return this.#element;
-  }
-
-  getDOMNode(): DOMNode | null {
-    return this.#renderedVNode?.getDOMNode() ?? null;
+  getDOMNode(): DOMNode {
+    return this.renderedVNode!.getDOMNode();
   }
 
   mount(): DOMNode {
     const { type, props } = this.element;
     const compInstance = new (type as Component)(props);
+    compInstance.vnode = this;
+    this.compInstance = compInstance;
 
-    this.#compInstance = compInstance;
-    currentTargetFn = this.#enqueuePatch;
-    const renderedElement = compInstance.render();
+    const renderedVNode = initVNode(compInstance.render());
+    this.renderedVNode = renderedVNode;
 
-    currentTargetFn = null;
-    this.#renderedVNode = initVNode(renderedElement);
-
-    const node = this.#renderedVNode.mount();
+    const node = this.renderedVNode.mount();
     compInstance.triggerMount();
+
     return node;
   }
 
   unmount() {
-    this.#compInstance?.unmount();
-    this.#renderedVNode?.unmount();
+    this.compInstance?.unmount();
+    this.renderedVNode?.unmount();
   }
 
   receive(props: Props) {
-    this.element.props = props;
-    this.#compInstance!.props = props;
-    this.patch();
+    if (this.compInstance!.receive(props)) {
+      this.element.props = props;
+      this.patch();
+    }
   }
 
   patch() {
-    const compInstance = this.#compInstance!;
-    const renderedVNode = this.#renderedVNode!;
+    const compInstance = this.compInstance!;
+    const renderedVNode = this.renderedVNode!;
     const renderedElement = renderedVNode.element;
-    const node = renderedVNode.getDOMNode()!;
+    const node = renderedVNode.getDOMNode();
     const nextRenderedElement = compInstance.render();
 
     if (isNullElement(renderedElement) && isNullElement(nextRenderedElement)) {
-      return;
-    }
-
-    if (isTextElement(renderedElement) && isTextElement(nextRenderedElement)) {
+      // nothing to do
+    } else if (
+      isTextElement(renderedElement) &&
+      isTextElement(nextRenderedElement)
+    ) {
       (renderedVNode as DOMVNode).element = nextRenderedElement;
       (node as Text).nodeValue = `${nextRenderedElement}`;
-      return;
-    }
-
-    if (isSameElementType(renderedElement, nextRenderedElement)) {
+    } else if (isSameElementType(renderedElement, nextRenderedElement)) {
       renderedVNode.receive((nextRenderedElement as JSX.Element).props);
-      return;
+    } else {
+      renderedVNode.unmount();
+
+      const nextRenderedVNode = initVNode(nextRenderedElement);
+      this.renderedVNode = nextRenderedVNode;
+
+      const nextNode = nextRenderedVNode.mount();
+      node.parentNode!.replaceChild(nextNode, node);
     }
 
-    renderedVNode.unmount();
-    const nextRenderedVNode = initVNode(nextRenderedElement);
-    const nextNode = nextRenderedVNode.mount();
-
-    this.#renderedVNode = nextRenderedVNode;
-    node.parentNode!.replaceChild(nextNode, node);
+    compInstance.triggerUpdate();
   }
 }
 
 class DOMVNode {
-  #element: JSX.Node;
-  #renderedChildren: (CompositeVNode | DOMVNode)[];
-  #node: DOMNode | null;
+  element: JSX.Node;
+  private renderedChildren: (CompositeVNode | DOMVNode)[];
+  private node: DOMNode | null;
 
   constructor(element: JSX.Node) {
-    this.#element = element;
-    this.#renderedChildren = [];
-    this.#node = null;
-  }
-
-  get element() {
-    return this.#element;
-  }
-
-  set element(value: JSX.Node) {
-    this.#element = value;
+    this.element = element;
+    this.renderedChildren = [];
+    this.node = null;
   }
 
   getDOMNode() {
-    return this.#node;
+    return this.node!;
   }
 
   mount() {
@@ -242,120 +272,125 @@ class DOMVNode {
     let node: DOMNode;
 
     if (isNullElement(element)) {
-      node = document.createComment('');
+      node = document.createDocumentFragment();
     } else if (isTextElement(element)) {
-      node = document.createTextNode(`${element}`);
+      const str = `${element}`;
+
+      this.element = str;
+      node = document.createTextNode(str);
     } else {
       const { type, props } = element as JSX.Element;
       const { children, ..._props } = props;
 
-      node = document.createElement(type as string);
-      updateNodeProps(node, _props);
+      if (type === Fragment) {
+        node = document.createDocumentFragment();
+      } else {
+        node = document.createElement(type as string);
+        updateNodeProps(node, _props);
+      }
 
-      const renderedChildren = (children as JSX.Node[]).map(initVNode);
-      this.#renderedChildren = renderedChildren;
+      const renderedChildren = (children ?? []).map(initVNode);
+      this.renderedChildren = renderedChildren;
 
       // append child dom nodes
       const childNodes = renderedChildren.map((child) => child.mount());
       childNodes.forEach((childNode) => node.appendChild(childNode));
     }
 
-    this.#node = node;
+    this.node = node;
     return node;
   }
 
   unmount() {
-    this.#renderedChildren.forEach((child) => child.unmount());
+    this.node = null;
+    this.renderedChildren.forEach((child) => child.unmount());
   }
 
-  receive(props: Props) {
+  receive(nextProps: Props) {
     const element = this.element as JSX.Element;
-    const prevProps = element.props;
+    const { type, props } = element;
 
-    element.props = props;
-    updateNodeProps(this.#node as Element, props, prevProps);
+    element.props = nextProps;
+    if (type !== Fragment) {
+      updateNodeProps(this.node as Element, nextProps, props);
+    }
 
-    const prevChildren = prevProps.children as JSX.Node[];
-    const nextChildren = props.children as JSX.Node[];
-    const prevRenderedChildren = this.#renderedChildren;
+    const children = props.children ?? [];
+    const nextChildren = nextProps.children ?? [];
+    const renderedChildren = this.renderedChildren;
     const nextRenderedChildren: (CompositeVNode | DOMVNode)[] = [];
     const opQueue: {
       type: string;
-      node: DOMNode;
+      nextNode?: DOMNode;
       prevNode?: DOMNode;
     }[] = [];
 
     for (let i = 0; i < nextChildren.length; i++) {
-      const prevChild = prevChildren[i];
+      const child = children[i];
       const nextChild = nextChildren[i];
-      const prevRenderedChild = prevRenderedChildren[i];
-      const prevNode = prevRenderedChild.getDOMNode()!;
+      const renderedChild = renderedChildren[i];
+      const node = renderedChild.getDOMNode();
+      let keepChild = true;
 
-      if (isNullElement(prevChild) && isNullElement(nextChild)) {
-        nextRenderedChildren.push(prevRenderedChild);
-        continue;
-      }
+      if (isNullElement(child) && isNullElement(nextChild)) {
+        // nothing to do
+      } else if (typeof child === 'string' && isTextElement(nextChild)) {
+        const nextStr = `${nextChild}`;
 
-      if (isTextElement(prevChild) && isTextElement(nextChild)) {
-        (prevRenderedChild as DOMVNode).element = nextChild;
-        (prevNode as Text).nodeValue = `${nextChild}`;
-        nextRenderedChildren.push(prevRenderedChild);
-        continue;
-      }
-
-      if (isSameElementType(prevChild, nextChild)) {
-        prevRenderedChild.receive((nextChild as JSX.Element).props);
-        nextRenderedChildren.push(prevRenderedChild);
-        continue;
-      }
-
-      const nextRenderedChild = initVNode(nextChildren[i]);
-      const node = nextRenderedChild.mount();
-
-      if (prevRenderedChild) {
-        prevRenderedChild.unmount();
-        opQueue.push({ type: 'REPLACE', node, prevNode });
+        if (child !== nextStr) {
+          renderedChild.element = nextStr;
+          (node as Text).nodeValue = nextStr;
+        }
+      } else if (isSameElementType(child, nextChild)) {
+        renderedChild.receive((nextChild as JSX.Element).props);
       } else {
-        opQueue.push({ type: 'ADD', node });
+        // now add new node or replace old node
+        keepChild = false;
+
+        const nextRenderedChild = initVNode(nextChildren[i]);
+        const nextNode = nextRenderedChild.mount();
+
+        if (renderedChild) {
+          renderedChild.unmount();
+          opQueue.push({ type: 'REPLACE', nextNode, prevNode: node });
+        } else {
+          opQueue.push({ type: 'APPEND', nextNode });
+        }
+        nextRenderedChildren.push(nextRenderedChild);
       }
-      nextRenderedChildren.push(nextRenderedChild);
+
+      if (keepChild) {
+        nextRenderedChildren.push(renderedChild);
+      }
     }
 
-    for (let j = nextChildren.length; j < prevChildren.length; j++) {
-      const prevRenderedChild = prevRenderedChildren[j];
-      const node = prevRenderedChild.getDOMNode()!;
+    for (let j = nextChildren.length; j < children.length; j++) {
+      const renderedChild = renderedChildren[j];
+      const node = renderedChild.getDOMNode();
 
-      prevRenderedChild.unmount();
-      opQueue.push({ type: 'REMOVE', node });
+      renderedChild.unmount();
+      opQueue.push({ type: 'REMOVE', prevNode: node });
     }
 
-    this.#renderedChildren = nextRenderedChildren;
-    const node = this.#node!;
+    this.renderedChildren = nextRenderedChildren;
+    const node = this.node!;
 
     while (opQueue.length > 0) {
       var op = opQueue.shift()!;
 
       switch (op.type) {
-        case 'ADD':
-          node.appendChild(op.node);
-          break;
         case 'REPLACE':
-          node.replaceChild(op.node, op.prevNode as DOMNode);
+          node.replaceChild(op.nextNode!, op.prevNode!);
+          break;
+        case 'APPEND':
+          node.appendChild(op.nextNode!);
           break;
         case 'REMOVE':
-          node.removeChild(op.node);
+          node.removeChild(op.prevNode!);
           break;
       }
     }
   }
-}
-
-function isSameElementType(prevElement: JSX.Node, nextElement: JSX.Node) {
-  return (
-    isJSXElement(prevElement) &&
-    isJSXElement(nextElement) &&
-    (prevElement as JSX.Element).type === (nextElement as JSX.Element).type
-  );
 }
 
 function isNullElement(element: JSX.Node) {
@@ -364,6 +399,14 @@ function isNullElement(element: JSX.Node) {
 
 function isTextElement(element: JSX.Node) {
   return !isNullElement(element) && !isJSXElement(element);
+}
+
+function isSameElementType(prevElement: JSX.Node, nextElement: JSX.Node) {
+  return (
+    isJSXElement(prevElement) &&
+    isJSXElement(nextElement) &&
+    (prevElement as JSX.Element).type === (nextElement as JSX.Element).type
+  );
 }
 
 function updateNodeProps(node: Element, props: Props, prevProps: Props = {}) {
@@ -377,7 +420,7 @@ function updateNodeProps(node: Element, props: Props, prevProps: Props = {}) {
     const prevValue = prevProps[propName];
     const value = props[propName];
 
-    if (Object.is(prevValue, value)) continue;
+    if (propName === 'children' || Object.is(prevValue, value)) continue;
 
     if (propName === 'className') {
       node.className = value;
@@ -423,15 +466,16 @@ function enqueuePatch(vnode: CompositeVNode) {
 }
 
 export function createSignal<T>(initialValue: T) {
+  if (!currentSetupInstance) {
+    throw new Error('`createSignal` must be called in setup function');
+  }
+
   const signal: Signal<T> = {
     value: initialValue,
-    listeners: [],
+    compInstance: currentSetupInstance,
   };
 
   const getter: SignalGetter<T> = () => {
-    if (currentTargetFn && !signal.listeners.includes(currentTargetFn)) {
-      signal.listeners.push(currentTargetFn);
-    }
     return signal.value;
   };
 
@@ -441,7 +485,11 @@ export function createSignal<T>(initialValue: T) {
 
     if (!Object.is(newVal, signal.value)) {
       signal.value = newVal;
-      signal.listeners.forEach((listener) => listener());
+
+      const { vnode } = signal.compInstance;
+      if (vnode) {
+        enqueuePatch(vnode);
+      }
     }
     return newVal;
   };
@@ -450,11 +498,24 @@ export function createSignal<T>(initialValue: T) {
 }
 
 export function onMount(fn: Function) {
-  currentSetupInstance?.onMountCallbacks.push(fn);
+  if (!currentSetupInstance) {
+    throw new Error('`onMount` must be called in setup function');
+  }
+  currentSetupInstance.onMount(fn);
+}
+
+export function onUpdate(fn: Function) {
+  if (!currentSetupInstance) {
+    throw new Error('`onUpdate` must be called in setup function');
+  }
+  currentSetupInstance.onUpdate(fn);
 }
 
 export function onUnmount(fn: Function) {
-  currentSetupInstance?.onUnmountCallbacks.push(fn);
+  if (!currentSetupInstance) {
+    throw new Error('`onUnmount` must be called in setup function');
+  }
+  currentSetupInstance.onUnmount(fn);
 }
 
 export function unmount(containerNode: Element) {
@@ -470,7 +531,7 @@ export function unmount(containerNode: Element) {
   containerNode.innerHTML = '';
 }
 
-export function mount(element: JSX.Element, containerNode: Element) {
+export function mount(element: JSX.Element, containerNode: HTMLElement) {
   unmount(containerNode);
 
   const rootVNode = initVNode(element);
@@ -479,3 +540,17 @@ export function mount(element: JSX.Element, containerNode: Element) {
   containerNode.appendChild(node);
   node['_internalVNode'] = rootVNode;
 }
+
+const vdom = {
+  h,
+  Fragment,
+  defineComponent,
+  createSignal,
+  onMount,
+  onUpdate,
+  onUnmount,
+  mount,
+  unmount,
+};
+
+export default vdom;

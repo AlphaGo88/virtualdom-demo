@@ -1,4 +1,4 @@
-import { h, defineComponent, createSignal } from 'vdom';
+import vdom, { defineComponent, createSignal } from 'vdom';
 import HelloWorld from './HelloWorld';
 import Counter from './Counter';
 
@@ -10,7 +10,7 @@ export default defineComponent(() => {
   }
 
   return () => (
-    <div className='abc'>
+    <>
       <h3>🌈</h3>
       <input type='text' value={name()} onInput={handleInput} />
       <HelloWorld name={name()} />
@@ -21,6 +21,6 @@ export default defineComponent(() => {
         <li>3</li>
         <li>4</li>
       </ul>
-    </div>
+    </>
   );
 });

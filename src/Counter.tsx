@@ -1,4 +1,4 @@
-import { h, defineComponent, createSignal } from 'vdom';
+import vdom, { defineComponent, createSignal } from 'vdom';
 
 export default defineComponent(() => {
   const [count, setCount] = createSignal(0);
@@ -11,8 +11,7 @@ export default defineComponent(() => {
 
   return () => (
     <div>
-      <span>{count()}</span>
-      <span>{count2()}</span>
+      <span>{count()}</span>=<span>{count2()}</span>
       <button type='button' onClick={handleClick}>
         +
       </button>
