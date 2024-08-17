@@ -18,27 +18,32 @@ const BOOL_ATTRS = [
   'selected',
 ];
 
-export namespace JSX {
-  export const ELEMENT_TYPE = Symbol('jsx.element');
-
-  export interface Element {
-    $$typeof: Symbol;
-    type: string | Component;
-    props: Props;
-  }
-
-  export type Node = Element | number | string | boolean | null | undefined;
+interface Ref<T> {
+  value: T;
 }
 
-type DOMNode = Element | Text | DocumentFragment;
+type DOMNodeRef = Ref<Element | null>;
 
 interface Props {
   [propName: string]: any;
   children?: JSX.Node[];
 }
 
-interface SetupFunc {
-  (props: Props): () => JSX.Node;
+interface Component {
+  new (props: Props, ref?: Ref<Element | null>): ComponentInstance;
+}
+
+namespace JSX {
+  export const ELEMENT_TYPE = Symbol('jsx.element');
+
+  export interface Element {
+    $$typeof: Symbol;
+    type: string | Component;
+    props: Props;
+    ref?: DOMNodeRef;
+  }
+
+  export type Node = Element | number | string | boolean | null | undefined;
 }
 
 interface ComponentInstance {
@@ -52,8 +57,8 @@ interface ComponentInstance {
   updateAsync: (stateId: Symbol) => void;
 }
 
-interface Component {
-  new (props: Props): ComponentInstance;
+interface SetupFunc {
+  (props: Props, ref?: Ref<Element | null>): () => JSX.Node;
 }
 
 interface State<T> {
@@ -70,10 +75,6 @@ interface StateSetter<T> {
   (value: T | ((prev: T) => T)): T;
 }
 
-interface Ref<T> {
-  value: T;
-}
-
 type Dep = string | Symbol;
 
 interface EffectFunc {
@@ -84,6 +85,8 @@ interface Effect {
   fn: EffectFunc;
   deps: Set<Dep>;
 }
+
+type DOMNode = Element | Text | DocumentFragment;
 
 let currentSetupInstance: ComponentInstance | null = null;
 let targetEffect: Effect | null = null;
@@ -103,13 +106,16 @@ export function h(
   props: Props = {},
   ...children: JSX.Node[]
 ): JSX.Element {
+  const { ref, ..._props } = props;
+
   return {
     $$typeof: JSX.ELEMENT_TYPE,
     type,
     props: {
-      ...props,
+      ..._props,
       children,
     },
+    ref,
   };
 }
 
@@ -127,10 +133,6 @@ class BaseComponent implements ComponentInstance {
   protected _render: () => JSX.Node;
 
   constructor(props: Props = {}) {
-    if (props.hasOwnProperty('ref')) {
-      (props.ref as Ref<ComponentInstance>).value = this;
-    }
-
     this._props = new Proxy(props, {
       get: (target, propName) => {
         if (!target.hasOwnProperty(propName)) {
@@ -242,19 +244,17 @@ class BaseComponent implements ComponentInstance {
  */
 export function defineComponent(setup: SetupFunc) {
   class UserDefinedComponent extends BaseComponent {
-    constructor(props: Props = {}) {
+    constructor(props: Props = {}, ref?: Ref<Element | null>) {
       super(props);
 
       currentSetupInstance = this;
-      this._render = setup(this._props);
+      this._render = setup(this._props, ref);
       currentSetupInstance = null;
     }
   }
 
   return UserDefinedComponent;
 }
-
-export function mergeProps() {}
 
 function initVNode(element: JSX.Node) {
   if (
@@ -269,7 +269,6 @@ function initVNode(element: JSX.Node) {
 
 class CompositeVNode {
   element: JSX.Element;
-
   private _renderedVNode: CompositeVNode | DOMVNode | null;
   private _compInstance: ComponentInstance | null;
 
@@ -284,8 +283,8 @@ class CompositeVNode {
   }
 
   mount(): DOMNode {
-    const { type, props } = this.element;
-    const compInstance = new (type as Component)(props);
+    const { type, props, ref } = this.element;
+    const compInstance = new (type as Component)(props, ref);
     this._compInstance = compInstance;
 
     const renderedVNode = initVNode(compInstance.render());
@@ -299,9 +298,7 @@ class CompositeVNode {
 
   unmount() {
     this._compInstance!.unmount();
-    this._compInstance = null;
     this._renderedVNode!.unmount();
-    this._renderedVNode = null;
   }
 
   receive(props: Props) {
@@ -341,7 +338,6 @@ class CompositeVNode {
 
 class DOMVNode {
   element: JSX.Node;
-
   private _renderedChildren: (CompositeVNode | DOMVNode)[];
   private _node: DOMNode | null;
 
@@ -367,12 +363,15 @@ class DOMVNode {
       this.element = str;
       node = document.createTextNode(str);
     } else {
-      const { type, props } = element as JSX.Element;
+      const { type, props, ref } = element as JSX.Element;
 
       if (type === Fragment) {
         node = document.createDocumentFragment();
       } else {
         node = document.createElement(type as string);
+        if (ref) {
+          ref.value = node;
+        }
         updateDOMNodeAttrs(node, props);
       }
 
@@ -389,6 +388,14 @@ class DOMVNode {
   }
 
   unmount() {
+    if (isJSXElement(this.element)) {
+      const { ref } = this.element as JSX.Element;
+
+      if (ref) {
+        ref.value = null;
+      }
+    }
+
     this._node = null;
     this._renderedChildren.forEach((child) => child.unmount());
   }
@@ -520,11 +527,6 @@ function updateDOMNodeAttrs(
     const prevValue = prevProps[propName];
     const nextValue = nextProps[propName];
 
-    if (propName === 'ref' && nextValue) {
-      (nextValue as Ref<Element>).value = node;
-      continue;
-    }
-
     if (propName === 'children' || Object.is(prevValue, nextValue)) {
       continue;
     }
@@ -614,6 +616,7 @@ export function useState<T>(initialValue: T) {
     if (targetEffect) {
       targetEffect.deps.add(state.id);
     }
+
     return state.value;
   };
 
@@ -627,6 +630,7 @@ export function useState<T>(initialValue: T) {
       state.value = newVal;
       state.compInstance.updateAsync(state.id);
     }
+
     return newVal;
   };
 
