@@ -1,4 +1,4 @@
-import vdom, { defineComponent, useEffect } from 'vdom';
+import { defineComponent, useEffect } from 'vdom';
 import Hello from './Hello';
 
 export default defineComponent((props) => {

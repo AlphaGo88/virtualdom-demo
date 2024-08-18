@@ -1,4 +1,4 @@
-import vdom, { defineComponent, onMount, onUnmount } from 'vdom';
+import { defineComponent, onMount, onUnmount } from 'vdom';
 
 export default defineComponent((props) => {
   onMount(() => console.log('mount'));

@@ -1,3 +1,6 @@
+import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from './shared/symbols';
+import { Ref, Props, JSXElement, JSXNode } from './shared/types';
+
 const BOOL_ATTRS = [
   'autofocus',
   'autoplay',
@@ -18,36 +21,12 @@ const BOOL_ATTRS = [
   'selected',
 ];
 
-interface Ref<T> {
-  value: T;
-}
-
-type DOMNodeRef = Ref<Element | null>;
-
-interface Props {
-  [propName: string]: any;
-  children?: JSX.Node[];
-}
-
 interface Component {
   new (props: Props, ref?: Ref<Element | null>): ComponentInstance;
 }
 
-namespace JSX {
-  export const ELEMENT_TYPE = Symbol('jsx.element');
-
-  export interface Element {
-    $$typeof: Symbol;
-    type: string | Component;
-    props: Props;
-    ref?: DOMNodeRef;
-  }
-
-  export type Node = Element | number | string | boolean | null | undefined;
-}
-
 interface ComponentInstance {
-  render: () => JSX.Node;
+  render: () => JSXNode;
   addMountCallback: (fn: () => void) => void;
   addUnmountCallback: (fn: () => void) => void;
   addEffect: (effect: Effect) => void;
@@ -58,7 +37,7 @@ interface ComponentInstance {
 }
 
 interface SetupFunc {
-  (props: Props, ref?: Ref<Element | null>): () => JSX.Node;
+  (props: Props, ref?: Ref<Element | null>): () => JSXNode;
 }
 
 interface State<T> {
@@ -93,44 +72,13 @@ let targetEffect: Effect | null = null;
 
 const effectQueue: EffectFunc[] = [];
 
-/**
- * Jsx is transformed into h funcition
- *
- * @param type
- * @param props
- * @param children
- * @returns
- */
-export function h(
-  type: string | Component,
-  props: Props = {},
-  ...children: JSX.Node[]
-): JSX.Element {
-  const { ref, ..._props } = props;
-
-  return {
-    $$typeof: JSX.ELEMENT_TYPE,
-    type,
-    props: {
-      ..._props,
-      children,
-    },
-    ref,
-  };
-}
-
-/**
- * Jsx fragment
- */
-export const Fragment = 'jsx.fragment';
-
 class BaseComponent implements ComponentInstance {
   protected _props: Props;
   private _vnode: CompositeVNode | null;
   private _mountCallbacks: EffectFunc[];
   private _unmountCallbacks: EffectFunc[];
   private _effects: Effect[];
-  protected _render: () => JSX.Node;
+  protected _render: () => JSXNode;
 
   constructor(props: Props = {}) {
     this._props = new Proxy(props, {
@@ -237,7 +185,7 @@ class BaseComponent implements ComponentInstance {
 }
 
 /**
- * The standard way to define component
+ * The standard way to define components
  *
  * @param setup - setup function returns a render function
  * @returns component constructor
@@ -256,23 +204,23 @@ export function defineComponent(setup: SetupFunc) {
   return UserDefinedComponent;
 }
 
-function initVNode(element: JSX.Node) {
+function initVNode(element: JSXNode) {
   if (
     isJSXElement(element) &&
-    typeof (element as JSX.Element).type === 'function'
+    typeof (element as JSXElement).type === 'function'
   ) {
-    return new CompositeVNode(element as JSX.Element);
+    return new CompositeVNode(element as JSXElement);
   }
 
   return new DOMVNode(element);
 }
 
 class CompositeVNode {
-  element: JSX.Element;
+  element: JSXElement;
   private _renderedVNode: CompositeVNode | DOMVNode | null;
   private _compInstance: ComponentInstance | null;
 
-  constructor(element: JSX.Element) {
+  constructor(element: JSXElement) {
     this.element = element;
     this._renderedVNode = null;
     this._compInstance = null;
@@ -323,7 +271,7 @@ class CompositeVNode {
         (node as Text).nodeValue = nextStr;
       }
     } else if (isSameJSXElementType(renderedElement, nextRenderedElement)) {
-      renderedVNode.receive((nextRenderedElement as JSX.Element).props);
+      renderedVNode.receive((nextRenderedElement as JSXElement).props);
     } else {
       renderedVNode.unmount();
 
@@ -337,11 +285,11 @@ class CompositeVNode {
 }
 
 class DOMVNode {
-  element: JSX.Node;
+  element: JSXNode;
   private _renderedChildren: (CompositeVNode | DOMVNode)[];
   private _node: DOMNode | null;
 
-  constructor(element: JSX.Node) {
+  constructor(element: JSXNode) {
     this.element = element;
     this._renderedChildren = [];
     this._node = null;
@@ -363,9 +311,9 @@ class DOMVNode {
       this.element = str;
       node = document.createTextNode(str);
     } else {
-      const { type, props, ref } = element as JSX.Element;
+      const { type, props, ref } = element as JSXElement;
 
-      if (type === Fragment) {
+      if (type === JSX_FRAGMENT_TYPE) {
         node = document.createDocumentFragment();
       } else {
         node = document.createElement(type as string);
@@ -389,7 +337,7 @@ class DOMVNode {
 
   unmount() {
     if (isJSXElement(this.element)) {
-      const { ref } = this.element as JSX.Element;
+      const { ref } = this.element as JSXElement;
 
       if (ref) {
         ref.value = null;
@@ -401,12 +349,12 @@ class DOMVNode {
   }
 
   receive(nextProps: Props) {
-    const element = this.element as JSX.Element;
+    const element = this.element as JSXElement;
     const { type, props } = element;
     const node = this._node! as Element;
 
     element.props = nextProps;
-    if (type !== Fragment) {
+    if (type !== JSX_FRAGMENT_TYPE) {
       updateDOMNodeAttrs(node, nextProps, props);
     }
 
@@ -437,7 +385,7 @@ class DOMVNode {
           (node as Text).nodeValue = nextStr;
         }
       } else if (isSameJSXElementType(child, nextChild)) {
-        renderedChild.receive((nextChild as JSX.Element).props);
+        renderedChild.receive((nextChild as JSXElement).props);
       } else {
         // now replace old node or append new node
         keepChild = false;
@@ -488,27 +436,27 @@ class DOMVNode {
   }
 }
 
-function isJSXElement(element: JSX.Node) {
+function isJSXElement(element: JSXNode) {
   return (
     typeof element === 'object' &&
     element !== null &&
-    element['$$typeof'] === JSX.ELEMENT_TYPE
+    element['$$typeof'] === JSX_ELEMENT_TYPE
   );
 }
 
-function isJSXNull(element: JSX.Node) {
+function isJSXNull(element: JSXNode) {
   return element === null || typeof element === 'boolean';
 }
 
-function isJSXText(element: JSX.Node) {
+function isJSXText(element: JSXNode) {
   return !isJSXNull(element) && !isJSXElement(element);
 }
 
-function isSameJSXElementType(prevElement: JSX.Node, nextElement: JSX.Node) {
+function isSameJSXElementType(prevElement: JSXNode, nextElement: JSXNode) {
   return (
     isJSXElement(prevElement) &&
     isJSXElement(nextElement) &&
-    (prevElement as JSX.Element).type === (nextElement as JSX.Element).type
+    (prevElement as JSXElement).type === (nextElement as JSXElement).type
   );
 }
 
@@ -670,7 +618,7 @@ export function onUnmount(fn: EffectFunc) {
   currentSetupInstance.addUnmountCallback(fn);
 }
 
-function unmount(containerNode: HTMLElement) {
+function unmount(containerNode: Element) {
   const node = containerNode.childNodes[0];
 
   if (node) {
@@ -684,7 +632,7 @@ function unmount(containerNode: HTMLElement) {
   containerNode.innerHTML = '';
 }
 
-export function mount(element: JSX.Element, containerNode: HTMLElement) {
+export function mount(element: JSXElement, containerNode: Element) {
   unmount(containerNode);
 
   const rootVNode = initVNode(element);
@@ -695,8 +643,6 @@ export function mount(element: JSX.Element, containerNode: HTMLElement) {
 }
 
 const vdom = {
-  h,
-  Fragment,
   defineComponent,
   useState,
   useEffect,

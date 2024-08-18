@@ -1,4 +1,4 @@
-import vdom, { defineComponent, useState } from 'vdom';
+import { defineComponent, useState } from 'vdom';
 
 export default defineComponent(() => {
   const [count, setCount] = useState(0);

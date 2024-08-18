@@ -1,4 +1,4 @@
-import vdom, { defineComponent, useState } from 'vdom';
+import { defineComponent, useState } from 'vdom';
 import Greet from './Greet';
 import Counter from './Counter';
 
