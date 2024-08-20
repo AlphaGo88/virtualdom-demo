@@ -11,12 +11,16 @@ export interface Props {
   children?: JSXNode[];
 }
 
+export type JSXElementTag = string | Symbol | Function;
+
 export interface JSXElement {
   $$typeof: Symbol;
-  type: string | Symbol | Function;
-  key: Key | undefined;
-  ref: DOMNodeRef | undefined;
+  tag: JSXElementTag;
+  key: Key | null;
+  ref: DOMNodeRef | null;
   props: Props;
 }
 
 export type JSXNode = JSXElement | number | string | boolean | null | undefined;
+
+export type DOMNode = Element | Text | DocumentFragment;

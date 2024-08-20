@@ -1,5 +1,11 @@
 import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from '../shared/symbols';
-import { Key, DOMNodeRef, Props, JSXElement } from '../shared/types';
+import type {
+  Key,
+  DOMNodeRef,
+  Props,
+  JSXElementTag,
+  JSXElement,
+} from '../shared/types';
 
 const RESERVED_PROPS = {
   key: true,
@@ -31,29 +37,25 @@ function validateRef(ref: unknown) {
   return valid;
 }
 
-function JSXElement(
-  type: string | Symbol | Function,
+function createJSXElement(
+  tag: JSXElementTag,
   key: Key | null,
   ref: DOMNodeRef | null,
   props: Props
-) {
+): JSXElement {
   const element = {
     $$typeof: JSX_ELEMENT_TYPE,
-    type: type,
-    key: key,
-    ref: ref,
-    props: props,
+    tag,
+    key,
+    ref,
+    props,
   };
 
   console.log(element);
   return element;
 }
 
-export function jsx(
-  type: string | Symbol | Function,
-  config: any,
-  maybeKey: unknown
-) {
+export function jsx(type: JSXElementTag, config: Props, maybeKey: unknown) {
   let key: Key | null = null;
   let ref: DOMNodeRef | null = null;
   const props: Props = {};
@@ -83,11 +85,11 @@ export function jsx(
     }
   });
 
-  return JSXElement(type, key, ref, props);
+  return createJSXElement(type, key, ref, props);
 }
 
 export function jsxDEV(
-  type: string | Function,
+  type: JSXElementTag,
   config: Props,
   maybeKey: unknown,
   source: any,
@@ -121,6 +123,6 @@ export function jsxDEV(
       }
     });
 
-    return JSXElement(type, key, ref, props);
+    return createJSXElement(type, key, ref, props);
   }
 }
