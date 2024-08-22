@@ -1,4 +1,8 @@
-import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from '../shared/symbols';
+import {
+  JSX_ELEMENT_TYPE,
+  JSX_FRAGMENT_TYPE,
+  JSX_PORTAL_TYPE,
+} from '../shared/symbols';
 import type { Props, JSXElement, JSXNode, DOMNode } from '../shared/types';
 import type { Component, ComponentInstance } from './component';
 import { updateDOMNodeAttrs } from '../dom';
@@ -19,9 +23,21 @@ function isJSXElement(element: JSXNode) {
   );
 }
 
+function isJSXComponent(element: JSXNode) {
+  return (
+    isJSXElement(element) && typeof (element as JSXElement).tag === 'function'
+  );
+}
+
 function isJSXFragment(element: JSXNode) {
   return (
     isJSXElement(element) && (element as JSXElement).tag === JSX_FRAGMENT_TYPE
+  );
+}
+
+function isJSXPortal(element: JSXNode) {
+  return (
+    isJSXElement(element) && (element as JSXElement).tag === JSX_PORTAL_TYPE
   );
 }
 
@@ -33,234 +49,262 @@ function isSameJSXElementTag(prevElement: JSXNode, nextElement: JSXNode) {
   );
 }
 
-export function initVNode(element: JSXNode) {
-  if (
-    isJSXElement(element) &&
-    typeof (element as JSXElement).tag === 'function'
-  ) {
-    return new CompositeVNode(element as JSXElement);
-  }
-
-  return new DOMVNode(element);
-}
-
-export class CompositeVNode {
-  element: JSXElement;
-  private _renderedVNode: CompositeVNode | DOMVNode | null;
-  private _compInstance: ComponentInstance | null;
-
-  constructor(element: JSXElement) {
-    this.element = element;
-    this._renderedVNode = null;
-    this._compInstance = null;
-  }
-
-  getDOMNode(): DOMNode {
-    return this._renderedVNode!.getDOMNode();
-  }
-
-  mount(): DOMNode {
-    const { tag, ref, props } = this.element;
-    const compInstance = new (tag as Component)(props, ref);
-    this._compInstance = compInstance;
-
-    const renderedVNode = initVNode(compInstance.render());
-    this._renderedVNode = renderedVNode;
-
-    const node = renderedVNode.mount();
-    compInstance.mount(this);
-
-    return node;
-  }
-
-  unmount() {
-    this._compInstance!.unmount();
-    this._renderedVNode!.unmount();
-  }
-
-  receive(props: Props) {
-    this.element.props = props;
-    this._compInstance!.receive(props);
-  }
-
-  patch() {
-    const compInstance = this._compInstance!;
-    const renderedVNode = this._renderedVNode!;
-    const renderedElement = renderedVNode.element;
-    const node = renderedVNode.getDOMNode();
-    const nextRenderedElement = compInstance.render();
-
-    if (isJSXNull(renderedElement) && isJSXNull(nextRenderedElement)) {
-      // nothing to do
-    } else if (isJSXText(renderedElement) && isJSXText(nextRenderedElement)) {
-      const nextStr = `${nextRenderedElement}`;
-
-      if (renderedElement !== nextStr) {
-        renderedVNode.element = nextStr;
-        (node as Text).nodeValue = nextStr;
-      }
-    } else if (isSameJSXElementTag(renderedElement, nextRenderedElement)) {
-      renderedVNode.receive((nextRenderedElement as JSXElement).props);
-    } else {
-      renderedVNode.unmount();
-
-      const nextRenderedVNode = initVNode(nextRenderedElement);
-      this._renderedVNode = nextRenderedVNode;
-
-      const nextNode = nextRenderedVNode.mount();
-      node.parentNode!.replaceChild(nextNode, node);
-    }
-  }
-}
-
-export class DOMVNode {
+export class VNode {
   element: JSXNode;
-  private _renderedChildren: (CompositeVNode | DOMVNode)[];
+  private _compInstance: ComponentInstance | null;
   private _node: DOMNode | null;
+  private _children: VNode | VNode[] | null;
 
   constructor(element: JSXNode) {
     this.element = element;
-    this._renderedChildren = [];
+
+    // This is used only for component vnode.
+    this._compInstance = null;
+
+    // This is used only for dom vnode.
     this._node = null;
+
+    this._children = null;
   }
 
-  getDOMNode() {
-    return this._node!;
-  }
-
-  mount() {
-    const element = this.element;
-    let node: DOMNode;
-
-    if (isJSXNull(element)) {
-      node = document.createDocumentFragment();
-    } else if (isJSXText(element)) {
-      const str = `${element}`;
-
-      this.element = str;
-      node = document.createTextNode(str);
-    } else {
-      const { tag, ref, props } = element as JSXElement;
-
-      if (isJSXFragment(element)) {
-        node = document.createDocumentFragment();
-      } else {
-        node = document.createElement(tag as string);
-        if (ref) {
-          ref.value = node;
-        }
-        updateDOMNodeAttrs(node, {}, props);
-      }
-
-      const renderedChildren = (props.children ?? []).map(initVNode);
-      this._renderedChildren = renderedChildren;
-
-      // append child dom nodes
-      const childNodes = renderedChildren.map((child) => child.mount());
-      childNodes.forEach((childNode) => node.appendChild(childNode));
+  getDOMNode(): DOMNode | null {
+    // for component vnode
+    if (isJSXComponent(this.element)) {
+      return (this._children as VNode).getDOMNode();
     }
 
-    this._node = node;
+    // for dom vnode
+    return this._node;
+  }
+
+  mount(): DOMNode | null {
+    const { element } = this;
+    let node: DOMNode | null = null;
+
+    if (isJSXNull(element)) {
+      return null;
+    }
+
+    if (isJSXElement(element)) {
+      const { tag, ref, props } = element as JSXElement;
+
+      if (isJSXComponent(element)) {
+        const compInstance = new (tag as Component)(props, ref);
+        this._compInstance = compInstance;
+
+        const childVNode = new VNode(compInstance.render());
+        this._children = childVNode;
+
+        node = childVNode.mount();
+        compInstance.mount(this);
+      } else {
+        if (isJSXPortal(element)) {
+          node = document.body;
+        } else if (isJSXFragment(element)) {
+          node = document.createDocumentFragment();
+        } else {
+          // Now it should be a html element.
+          node = document.createElement(tag as string);
+
+          if (ref) {
+            ref.value = node;
+          }
+          updateDOMNodeAttrs(node, {}, props);
+        }
+
+        let childVNodes: VNode[] = [];
+
+        if (Array.isArray(props.children)) {
+          childVNodes = props.children.map((child) => new VNode(child));
+        } else {
+          childVNodes = [new VNode(props.children)];
+        }
+        this._children = childVNodes;
+
+        // append child dom nodes
+        childVNodes.forEach((childVNode) => {
+          const childNode = childVNode.mount();
+
+          if (childNode && !isJSXPortal(childVNode.element)) {
+            node!.appendChild(childNode);
+          }
+        });
+      }
+    } else {
+      // now treat the element as a text node
+      const text = '' + element;
+
+      this.element = text;
+      node = document.createTextNode(text);
+    }
+
+    // don't set '_node' if we are in a component vnode
+    if (!isJSXComponent(element)) {
+      this._node = node;
+    }
     return node;
   }
 
   unmount() {
-    if (isJSXElement(this.element)) {
-      const { ref } = this.element as JSXElement;
+    const { element, _compInstance, _node, _children } = this;
 
-      if (ref) {
-        ref.value = null;
+    if (_compInstance) {
+      _compInstance.unmount();
+      (_children as VNode).unmount();
+    } else {
+      if (isJSXElement(element)) {
+        const { ref } = element as JSXElement;
+
+        if (ref) {
+          ref.value = null;
+        }
+      }
+
+      // portal children are removed immediately
+      if (_node?.parentNode === document.body) {
+        document.body.removeChild(_node);
+      }
+
+      this._node = null;
+      (_children as VNode[]).forEach((child) => child.unmount());
+    }
+  }
+
+  receive(props: Props) {
+    if (this._compInstance) {
+      // When there is a component instance,
+      // vnode.patch() will be called as the instance's effect.
+      this._compInstance.receive(props);
+    } else {
+      this.patch(props);
+    }
+  }
+
+  patch(nextProps: Props = {}) {
+    const element = this.element as JSXElement;
+    const compInstance = this._compInstance;
+
+    let childVNodes: VNode[] = [];
+    const nextChildVNodes: VNode[] = [];
+
+    let childElements: JSXNode[] = [];
+    let nextChildElements: JSXNode[] = [];
+
+    const node = this.getDOMNode()!;
+
+    if (compInstance) {
+      const childVNode = this._children as VNode;
+
+      element.props = compInstance.props;
+
+      childVNodes = [childVNode];
+      childElements = [childVNode.element];
+      nextChildElements = [compInstance.render()];
+    } else {
+      const { props } = element;
+
+      element.props = nextProps;
+
+      childVNodes = this._children as VNode[];
+      childElements = Array.isArray(props.children)
+        ? props.children
+        : [props.children];
+      nextChildElements = Array.isArray(nextProps.children)
+        ? nextProps.children
+        : [nextProps.children];
+
+      if (!isJSXPortal(element) && !isJSXFragment(element)) {
+        updateDOMNodeAttrs(node as Element, props, nextProps);
       }
     }
 
-    this._node = null;
-    this._renderedChildren.forEach((child) => child.unmount());
-  }
+    const len = Math.min(childElements.length, nextChildElements.length);
+    let currentNodeIndex = 0;
 
-  receive(nextProps: Props) {
-    const element = this.element as JSXElement;
-    const { props } = element;
-    const node = this._node! as Element;
+    for (let i = 0; i < len; i++) {
+      const childVNode = childVNodes[i];
+      const childElement = childElements[i];
+      const nextChildElement = nextChildElements[i];
+      const childNode = childVNode.getDOMNode();
 
-    element.props = nextProps;
-    if (!isJSXFragment(element)) {
-      updateDOMNodeAttrs(node, props, nextProps);
-    }
-
-    const children = props.children ?? [];
-    const nextChildren = nextProps.children ?? [];
-    const renderedChildren = this._renderedChildren;
-    const nextRenderedChildren: (CompositeVNode | DOMVNode)[] = [];
-    const opQueue: {
-      type: string;
-      nextNode?: DOMNode;
-      prevNode?: DOMNode;
-    }[] = [];
-
-    for (let i = 0; i < nextChildren.length; i++) {
-      const child = children[i];
-      const nextChild = nextChildren[i];
-      const renderedChild = renderedChildren[i];
-      const node = renderedChild.getDOMNode();
       let keepChild = true;
 
-      if (isJSXNull(child) && isJSXNull(nextChild)) {
-        // nothing to do
-      } else if (typeof child === 'string' && isJSXText(nextChild)) {
-        const nextStr = `${nextChild}`;
+      if (isJSXNull(childElement) && isJSXNull(nextChildElement)) {
+        // do nothing
+      } else if (
+        typeof childElement === 'string' &&
+        isJSXText(nextChildElement)
+      ) {
+        const text = '' + nextChildElement;
 
-        if (child !== nextStr) {
-          renderedChild.element = nextStr;
-          (node as Text).nodeValue = nextStr;
+        // update text node
+        if (childElement !== text) {
+          childVNode.element = text;
+          (childNode as Text).nodeValue = text;
         }
-      } else if (isSameJSXElementTag(child, nextChild)) {
-        renderedChild.receive((nextChild as JSXElement).props);
+
+        currentNodeIndex++;
+      } else if (isSameJSXElementTag(childElement, nextChildElement)) {
+        // same jsx element tag, apply new props
+        childVNode.receive((nextChildElement as JSXElement).props);
+
+        if (!isJSXPortal(childElement)) {
+          currentNodeIndex++;
+        }
       } else {
-        // now replace old node or append new node
+        // now we need to replace the child vnode
         keepChild = false;
+        childVNode.unmount();
 
-        const nextRenderedChild = initVNode(nextChildren[i]);
-        const nextNode = nextRenderedChild.mount();
+        const nextChildVNode = new VNode(nextChildElement);
+        const nextChildNode = nextChildVNode.mount();
 
-        if (renderedChild) {
-          renderedChild.unmount();
-          opQueue.push({ type: 'REPLACE', nextNode, prevNode: node });
-        } else {
-          opQueue.push({ type: 'APPEND', nextNode });
+        if (childNode && !isJSXPortal(childElement)) {
+          node.removeChild(childNode);
         }
 
-        nextRenderedChildren.push(nextRenderedChild);
+        if (nextChildNode && !isJSXPortal(nextChildElement)) {
+          if (currentNodeIndex >= node.childNodes.length) {
+            node.appendChild(nextChildNode);
+          } else {
+            node.insertBefore(nextChildNode, node.childNodes[currentNodeIndex]);
+          }
+
+          currentNodeIndex++;
+        }
+
+        nextChildVNodes.push(nextChildVNode);
       }
 
       if (keepChild) {
-        nextRenderedChildren.push(renderedChild);
+        nextChildVNodes.push(childVNode);
       }
     }
 
-    for (let j = nextChildren.length; j < children.length; j++) {
-      const renderedChild = renderedChildren[j];
-      const node = renderedChild.getDOMNode();
+    // remove nodes if necessary
+    for (let j = nextChildElements.length; j < childElements.length; j++) {
+      const childVNode = childVNodes[j];
+      const childElement = childVNode.element;
+      const childNode = childVNode.getDOMNode();
 
-      renderedChild.unmount();
-      opQueue.push({ type: 'REMOVE', prevNode: node });
-    }
-
-    this._renderedChildren = nextRenderedChildren;
-
-    while (opQueue.length > 0) {
-      const op = opQueue.shift()!;
-
-      switch (op.type) {
-        case 'REPLACE':
-          node.replaceChild(op.nextNode!, op.prevNode!);
-          break;
-        case 'APPEND':
-          node.appendChild(op.nextNode!);
-          break;
-        case 'REMOVE':
-          node.removeChild(op.prevNode!);
-          break;
+      childVNode.unmount();
+      if (childNode && !isJSXPortal(childElement)) {
+        node.removeChild(childNode);
       }
     }
+
+    // append nodes if necessary
+    for (let k = childElements.length; k < nextChildElements.length; k++) {
+      const nextChildElement = nextChildElements[k];
+      const nextChildVNode = new VNode(nextChildElement);
+      const nextChildNode = nextChildVNode.mount();
+
+      nextChildVNodes.push(nextChildVNode);
+      if (nextChildNode && !isJSXPortal(nextChildElement)) {
+        node.appendChild(nextChildNode);
+      }
+    }
+
+    this._children = compInstance ? nextChildVNodes[0] : nextChildVNodes;
   }
 }

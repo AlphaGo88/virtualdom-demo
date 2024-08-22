@@ -37,7 +37,7 @@ function validateRef(ref: unknown) {
   return valid;
 }
 
-function createJSXElement(
+export function createJSXElement(
   tag: JSXElementTag,
   key: Key | null,
   ref: DOMNodeRef | null,
@@ -75,13 +75,7 @@ export function jsx(type: JSXElementTag, config: Props, maybeKey: unknown) {
 
   Object.keys(config).forEach((propName) => {
     if (!RESERVED_PROPS.hasOwnProperty(propName)) {
-      if (propName === 'children') {
-        props.children = Array.isArray(config.children)
-          ? config.children
-          : [config.children];
-      } else {
-        props[propName] = config[propName];
-      }
+      props[propName] = config[propName];
     }
   });
 
@@ -113,13 +107,7 @@ export function jsxDEV(
 
     Object.keys(config).forEach((propName) => {
       if (!RESERVED_PROPS.hasOwnProperty(propName)) {
-        if (propName === 'children') {
-          props.children = Array.isArray(config.children)
-            ? config.children
-            : [config.children];
-        } else {
-          props[propName] = config[propName];
-        }
+        props[propName] = config[propName];
       }
     });
 

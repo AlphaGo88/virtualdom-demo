@@ -1,16 +1,17 @@
 import type { Ref, DOMNodeRef, Props, JSXNode } from '../shared/types';
-import type { CompositeVNode } from './vnode';
+import type { VNode } from './vnode';
 
 export interface Component {
   new (props: Props, ref: DOMNodeRef | null): ComponentInstance;
 }
 
 export interface ComponentInstance {
+  props: Props;
   render: () => JSXNode;
   addMountCallback: (fn: () => void) => void;
   addUnmountCallback: (fn: () => void) => void;
   addEffect: (effect: Effect) => void;
-  mount: (vnode: CompositeVNode) => void;
+  mount: (vnode: VNode) => void;
   unmount: () => void;
   receive: (props: Props) => void;
   updateAsync: (stateId: Symbol) => void;
@@ -63,15 +64,15 @@ function enqueueEffect(fn: EffectFunc) {
 }
 
 class BaseComponent implements ComponentInstance {
-  protected _props: Props;
-  private _vnode: CompositeVNode | null;
+  props: Props;
+  private _vnode: VNode | null;
   private _mountCallbacks: EffectFunc[];
   private _unmountCallbacks: EffectFunc[];
   private _effects: Effect[];
   protected _render: () => JSXNode;
 
   constructor(props: Props = {}) {
-    this._props = new Proxy(props, {
+    this.props = new Proxy(props, {
       get: (target, propName) => {
         if (!target.hasOwnProperty(propName)) {
           return undefined;
@@ -121,7 +122,7 @@ class BaseComponent implements ComponentInstance {
     this._effects.push(effect);
   }
 
-  mount(vnode: CompositeVNode) {
+  mount(vnode: VNode) {
     this._vnode = vnode;
 
     const callbacks = this._mountCallbacks;
@@ -145,12 +146,12 @@ class BaseComponent implements ComponentInstance {
   receive(props: Props) {
     const effectsToRun = new Set<EffectFunc>();
 
-    Object.keys(this._props).forEach((propName) => {
-      const oldValue = this._props[propName];
+    Object.keys(this.props).forEach((propName) => {
+      const oldValue = this.props[propName];
       const newValue = props[propName];
 
       if (!Object.is(oldValue, newValue)) {
-        this._props[propName] = newValue;
+        this.props[propName] = newValue;
 
         this._effects.forEach(({ fn, deps }) => {
           if (!effectsToRun.has(fn) && deps.has(propName)) {
@@ -186,7 +187,7 @@ export function defineComponent(setup: SetupFunc) {
       super(props);
 
       currentSetupInstance = this;
-      this._render = setup(this._props, ref);
+      this._render = setup(this.props, ref);
       currentSetupInstance = null;
     }
   }

@@ -8,8 +8,10 @@ export type DOMNodeRef = Ref<Element | null>;
 
 export interface Props {
   [propName: string]: any;
-  children?: JSXNode[];
+  children?: JSXChildren;
 }
+
+export type JSXChildren = JSXNode | JSXNode[];
 
 export type JSXElementTag = string | Symbol | Function;
 
