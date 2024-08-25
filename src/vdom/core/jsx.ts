@@ -1,11 +1,11 @@
-import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from '../shared/symbols';
+import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from 'shared/symbols';
 import type {
   Key,
   DOMNodeRef,
   Props,
   JSXElementTag,
   JSXElement,
-} from '../shared/types';
+} from 'shared/types';
 
 const RESERVED_PROPS = {
   key: true,
@@ -14,18 +14,6 @@ const RESERVED_PROPS = {
   __source: true,
 };
 
-export { JSX_FRAGMENT_TYPE as Fragment };
-
-function warnIfDeprecatedKey(key: unknown) {
-  if (typeof key !== 'string' && typeof key !== 'number') {
-    console.error(
-      'Key "%s" has type "%s" which is deprecated, use string or number instead',
-      key,
-      typeof key
-    );
-  }
-}
-
 function validateRef(ref: unknown) {
   const valid =
     typeof ref === 'object' && ref !== null && ref.hasOwnProperty('value');
@@ -33,11 +21,10 @@ function validateRef(ref: unknown) {
   if (__DEV__ && !valid) {
     console.error('Invalid ref "%s", fix this by using "useRef" instead', ref);
   }
-
   return valid;
 }
 
-export function createJSXElement(
+function createJSXElement(
   tag: JSXElementTag,
   key: Key | null,
   ref: DOMNodeRef | null,
@@ -56,18 +43,11 @@ export function createJSXElement(
 }
 
 export function jsx(type: JSXElementTag, config: Props, maybeKey: unknown) {
-  let key: Key | null = null;
+  const key = maybeKey == null ? null : '' + maybeKey;
   let ref: DOMNodeRef | null = null;
   const props: Props = {};
 
-  if (maybeKey !== undefined) {
-    if (__DEV__) {
-      warnIfDeprecatedKey(maybeKey);
-    }
-    key = '' + maybeKey;
-  }
-
-  if (config.ref !== undefined) {
+  if (config.ref != null) {
     if (validateRef(config.ref)) {
       ref = config.ref;
     }
@@ -90,16 +70,11 @@ export function jsxDEV(
   self: any
 ) {
   if (__DEV__) {
-    let key: Key | null = null;
+    const key = maybeKey == null ? null : '' + maybeKey;
     let ref: DOMNodeRef | null = null;
     const props: Props = {};
 
-    if (maybeKey !== undefined) {
-      warnIfDeprecatedKey(maybeKey);
-      key = '' + maybeKey;
-    }
-
-    if (config.ref !== undefined) {
+    if (config.ref != null) {
       if (validateRef(config.ref)) {
         ref = config.ref;
       }
@@ -114,3 +89,5 @@ export function jsxDEV(
     return createJSXElement(type, key, ref, props);
   }
 }
+
+export { JSX_FRAGMENT_TYPE as Fragment };

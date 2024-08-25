@@ -1,5 +1,5 @@
-import type { Ref, DOMNodeRef, Props, JSXNode } from '../shared/types';
-import type { VNode } from './vnode';
+import type { Ref, DOMNodeRef, Props, JSXNode } from 'shared/types';
+import type { VNode } from 'core/vnode';
 
 export interface Component {
   new (props: Props, ref: DOMNodeRef | null): ComponentInstance;

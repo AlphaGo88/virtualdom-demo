@@ -17,9 +17,12 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
     "paths": {
-      "vdom": ["./src/vdom"],
+      "vdom": ["./src/vdom/index"],
       "vdom/jsx-runtime": ["./src/vdom/jsx-runtime"],
-      "vdom/jsx-dev-runtime": ["./src/vdom/jsx-dev-runtime"]
+      "vdom/jsx-dev-runtime": ["./src/vdom/jsx-dev-runtime"],
+      "core/*": ["./src/vdom/core/*"],
+      "dom/*": ["./src/vdom/dom/*"],
+      "shared/*": ["./src/vdom/shared/*"]
     }
   }
 }

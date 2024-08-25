@@ -1,1 +1,1 @@
-export { Fragment, jsx } from './jsx';
+export { Fragment, jsx } from 'core/jsx';

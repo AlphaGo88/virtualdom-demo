@@ -1,6 +1,10 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 
+function resolve(path) {
+  return fileURLToPath(new URL(path, import.meta.url));
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
   return {
@@ -9,7 +13,10 @@ export default defineConfig(({ command }) => {
     },
     resolve: {
       alias: {
-        vdom: fileURLToPath(new URL('./src/vdom', import.meta.url)),
+        vdom: resolve('./src/vdom'),
+        core: resolve('./src/vdom/core'),
+        dom: resolve('./src/vdom/dom'),
+        shared: resolve('./src/vdom/shared'),
       },
     },
   };

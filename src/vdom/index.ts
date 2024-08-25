@@ -1,13 +1,13 @@
-import type { JSXNode } from './shared/types';
-import { VNode } from './core/vnode';
+import type { JSXNode } from 'shared/types';
+import { createPortal } from 'core/portal';
+import { VNode } from 'core/vnode';
 import {
   defineComponent,
   useState,
   useEffect,
   onMount,
   onUnmount,
-} from './core/component';
-import { createPortal } from './core/portal';
+} from 'core/component';
 
 function unmount(containerNode: Element) {
   const node = containerNode.childNodes[0];

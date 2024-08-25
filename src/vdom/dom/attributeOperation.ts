@@ -1,5 +1,5 @@
-import type { Props } from '../shared/types';
-import { AttrType, type AttrInfo, attributes } from './attributes';
+import type { Props } from 'shared/types';
+import { type AttrInfo, AttrType, attributes } from 'dom/attributes';
 
 function getAttrInfo(propName: string) {
   return attributes.hasOwnProperty(propName) ? attributes[propName] : null;
@@ -13,7 +13,7 @@ function isEventProp(propName: string) {
   return propName.slice(0, 2) === 'on';
 }
 
-export function updateDOMNodeAttrs(
+export function updateNodeAttrs(
   node: Element,
   prevProps: Props,
   nextProps: Props

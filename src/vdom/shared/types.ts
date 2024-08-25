@@ -13,6 +13,13 @@ export interface Props {
 
 export type JSXChildren = JSXNode | JSXNode[];
 
+export interface JSXPortal {
+  $$typeof: Symbol;
+  key: Key | null;
+  children: JSXChildren;
+  container: Element | DocumentFragment;
+}
+
 export type JSXElementTag = string | Symbol | Function;
 
 export interface JSXElement {
@@ -23,6 +30,13 @@ export interface JSXElement {
   props: Props;
 }
 
-export type JSXNode = JSXElement | number | string | boolean | null | undefined;
+export type JSXNode =
+  | JSXPortal
+  | JSXElement
+  | number
+  | string
+  | boolean
+  | null
+  | undefined;
 
 export type DOMNode = Element | Text | DocumentFragment;
