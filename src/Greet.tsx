@@ -1,7 +1,7 @@
 import { defineComponent, useEffect } from 'vdom';
 import Hello from './Hello';
 
-export default defineComponent((props) => {
+export default defineComponent<{ name: string }>((props) => {
   useEffect(() => console.log(props.name));
 
   return () =>

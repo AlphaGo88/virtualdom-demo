@@ -1,125 +1,64 @@
-import type { Ref, DOMNodeRef, Props, JSXNode } from 'shared/types';
+import { COMPONENT_TYPE } from 'shared/symbols';
+import type { Ref, Props, JSXNode } from 'shared/types';
 import type { VNode } from 'core/vnode';
+import { type Effect, targetEffect } from './hooks';
 
 export interface Component {
-  new (props: Props, ref: DOMNodeRef | null): ComponentInstance;
+  $$typeof: Symbol;
+  new (props: any, ref: Ref<Element> | null): ComponentInstance;
 }
 
 export interface ComponentInstance {
-  props: Props;
+  props: any;
   render: () => JSXNode;
   addMountCallback: (fn: () => void) => void;
   addUnmountCallback: (fn: () => void) => void;
-  addEffect: (effect: Effect) => void;
   mount: (vnode: VNode) => void;
   unmount: () => void;
-  receive: (props: Props) => void;
-  updateAsync: (stateId: Symbol) => void;
+  receive: (props: any) => void;
 }
 
-export interface SetupFunc {
-  (props: Props, ref: DOMNodeRef | null): () => JSXNode;
-}
+export type PropConfig = Map<string, { watchers: Set<Effect> }>;
 
-export interface State<T> {
-  id: Symbol;
-  value: T;
-  compInstance: ComponentInstance;
-}
-
-export interface StateGetter<T> {
-  (): T;
-}
-
-export interface StateSetter<T> {
-  (value: T | ((prev: T) => T)): T;
-}
-
-export type Dep = string | Symbol;
-
-export interface EffectFunc {
-  (): void;
-}
-
-export interface Effect {
-  fn: EffectFunc;
-  deps: Set<Dep>;
-}
-
-let currentSetupInstance: ComponentInstance | null = null;
-let targetEffect: Effect | null = null;
-
-const effectQueue: EffectFunc[] = [];
-
-function enqueueEffect(fn: EffectFunc) {
-  if (!effectQueue.includes(fn)) {
-    effectQueue.push(fn);
-
-    Promise.resolve().then(() => {
-      while (effectQueue.length > 0) {
-        effectQueue.shift()!();
-      }
-    });
-  }
-}
+export let currentSetupInstance: ComponentInstance | null = null;
 
 class BaseComponent implements ComponentInstance {
-  props: Props;
-  private _vnode: VNode | null;
-  private _mountCallbacks: EffectFunc[];
-  private _unmountCallbacks: EffectFunc[];
-  private _effects: Effect[];
+  static $$typeof = COMPONENT_TYPE;
+
+  props: any;
+  protected _propConfig: PropConfig;
+
+  // this is circular
+  protected _vnode: VNode | null;
+
+  protected _mountCallbacks: Effect[];
+  protected _unmountCallbacks: Effect[];
   protected _render: () => JSXNode;
+  protected _patch: () => void;
 
-  constructor(props: Props = {}) {
-    this.props = new Proxy(props, {
-      get: (target, propName) => {
-        if (!target.hasOwnProperty(propName)) {
-          return undefined;
-        }
-
-        // collect effect dependencies
-        if (targetEffect) {
-          targetEffect.deps.add(propName as string);
-        }
-
-        return target[propName as string];
-      },
-    });
-
+  constructor() {
+    this._propConfig = new Map();
     this._vnode = null;
     this._mountCallbacks = [];
     this._unmountCallbacks = [];
-    this._effects = [
-      {
-        fn: () => {
-          this._vnode?.patch();
-        },
-        deps: new Set<Dep>(),
-      },
-    ];
     this._render = () => null;
+    this._patch = () => this._vnode?.patch();
   }
 
   render() {
-    // collect dependencies for vnode.patch() in render function
-    targetEffect = this._effects[0];
+    targetEffect.value = this._patch;
     const renderedElement = this._render();
 
-    targetEffect = null;
+    targetEffect.value = null;
     return renderedElement;
   }
 
-  addMountCallback(fn: EffectFunc) {
+  addMountCallback(fn: () => void) {
     this._mountCallbacks.push(fn);
   }
 
-  addUnmountCallback(fn: EffectFunc) {
+  addUnmountCallback(fn: () => void) {
     this._unmountCallbacks.push(fn);
-  }
-
-  addEffect(effect: Effect) {
-    this._effects.push(effect);
   }
 
   mount(vnode: VNode) {
@@ -129,9 +68,6 @@ class BaseComponent implements ComponentInstance {
     while (callbacks.length) {
       callbacks.shift()!();
     }
-
-    // run effects created by `useEffect`
-    this._effects.slice(1).forEach(({ fn }) => fn());
   }
 
   unmount() {
@@ -143,135 +79,90 @@ class BaseComponent implements ComponentInstance {
     }
   }
 
-  receive(props: Props) {
-    const effectsToRun = new Set<EffectFunc>();
+  receive(nextProps: any) {
+    if (!nextProps || typeof nextProps !== 'object') {
+      return;
+    }
 
-    Object.keys(this.props).forEach((propName) => {
-      const oldValue = this.props[propName];
-      const newValue = props[propName];
+    const { props } = this;
+    const propNames = new Set([
+      ...Object.keys(props),
+      ...Object.keys(nextProps),
+    ]);
+    const effectsToRun = new Set<Effect>();
 
-      if (!Object.is(oldValue, newValue)) {
-        this.props[propName] = newValue;
+    propNames.forEach((name) => {
+      const val = props[name];
+      const nextVal = nextProps[name];
 
-        this._effects.forEach(({ fn, deps }) => {
-          if (!effectsToRun.has(fn) && deps.has(propName)) {
-            effectsToRun.add(fn);
-          }
-        });
+      if (!Object.is(val, nextVal)) {
+        const config = this._propConfig.get(name);
+
+        props[name] = nextVal;
+        config?.watchers.forEach(effectsToRun.add);
       }
     });
 
     // run effects
     effectsToRun.forEach((fn) => fn());
   }
-
-  // run effects asynchronously when a state changes
-  updateAsync(stateId: Symbol) {
-    this._effects.forEach(({ fn, deps }) => {
-      if (deps.has(stateId)) {
-        enqueueEffect(fn);
-      }
-    });
-  }
 }
 
 /**
  * The standard way to define components
  *
- * @param setup - setup function returns a render function
+ * @param setup - The setup function returns a render function
  * @returns component constructor
  */
-export function defineComponent(setup: SetupFunc) {
-  class UserDefinedComponent extends BaseComponent {
-    constructor(props: Props = {}, ref: DOMNodeRef | null) {
-      super(props);
+export function defineComponent<P extends object>(
+  setup: (props: P, ref: Ref<Element> | null) => () => JSXNode
+) {
+  class Component extends BaseComponent {
+    props: Props<P>;
+
+    constructor(props: Props<P>, ref: Ref<Element> | null) {
+      super();
+
+      const propConfig = this._propConfig;
+      this.props = new Proxy(props ?? {}, {
+        get(target, p) {
+          if (typeof p !== 'string' || !target.hasOwnProperty(p)) {
+            return undefined;
+          }
+
+          if (targetEffect.value) {
+            const config = propConfig.get(p);
+
+            // collect watchers
+            if (config) {
+              config.watchers.add(targetEffect.value);
+            } else {
+              propConfig.set(p, {
+                watchers: new Set<Effect>().add(targetEffect.value),
+              });
+            }
+          }
+
+          return target[p];
+        },
+
+        set(target, p, value) {
+          if (typeof p !== 'string') {
+            return false;
+          }
+
+          target[p] = value;
+          return true;
+        },
+      });
 
       currentSetupInstance = this;
+      // The props is reactive, users should not destructure it.
+      // The 'ref' argument can be used to forward ref.
       this._render = setup(this.props, ref);
       currentSetupInstance = null;
     }
   }
 
-  return UserDefinedComponent;
-}
-
-export function useRef<T>(initialValue: T): Ref<T> {
-  return { value: initialValue };
-}
-
-export function useState<T>(initialValue: T) {
-  if (!currentSetupInstance) {
-    throw new Error(
-      'Invalid hook call. "useState" can only be called inside setup function.'
-    );
-  }
-
-  const state: State<T> = {
-    id: Symbol(),
-    value: initialValue,
-    compInstance: currentSetupInstance,
-  };
-
-  const getter: StateGetter<T> = () => {
-    if (targetEffect) {
-      targetEffect.deps.add(state.id);
-    }
-
-    return state.value;
-  };
-
-  const setter: StateSetter<T> = (value) => {
-    const newVal: T =
-      typeof value === 'function'
-        ? (value as (prev: T) => T)(state.value)
-        : value;
-
-    if (!Object.is(newVal, state.value)) {
-      state.value = newVal;
-      state.compInstance.updateAsync(state.id);
-    }
-
-    return newVal;
-  };
-
-  return [getter, setter] as [StateGetter<T>, StateSetter<T>];
-}
-
-export function useEffect(fn: EffectFunc) {
-  if (!currentSetupInstance) {
-    throw new Error(
-      'Invalid hook call. "useEffect" can only be called inside setup function.'
-    );
-  }
-
-  const effect = {
-    fn: () => {
-      targetEffect = effect;
-      fn();
-      targetEffect = null;
-    },
-    deps: new Set<Dep>(),
-  };
-
-  currentSetupInstance.addEffect(effect);
-}
-
-export function onMount(fn: EffectFunc) {
-  if (!currentSetupInstance) {
-    throw new Error(
-      'Invalid hook call. "onMount" can only be called inside setup function.'
-    );
-  }
-
-  currentSetupInstance.addMountCallback(fn);
-}
-
-export function onUnmount(fn: EffectFunc) {
-  if (!currentSetupInstance) {
-    throw new Error(
-      'Invalid hook call. "onUnmount" can only be called inside setup function.'
-    );
-  }
-
-  currentSetupInstance.addUnmountCallback(fn);
+  return Component;
 }

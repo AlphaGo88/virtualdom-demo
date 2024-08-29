@@ -1,4 +1,4 @@
-import { mount } from 'vdom';
+import { createRoot } from 'vdom';
 import App from './App';
 
-mount(<App />, document.getElementById('app')!);
+createRoot(document.getElementById('app')!).render(<App />);

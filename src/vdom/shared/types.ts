@@ -1,17 +1,18 @@
-export type Key = string;
-
-export interface Ref<T> {
+export interface ValueContainer<T> {
   value: T;
 }
 
-export type DOMNodeRef = Ref<Element | null>;
+export type Key = string;
 
-export interface Props {
-  [propName: string]: any;
-  children?: JSXChildren;
+export interface Ref<T> {
+  value: T | null;
 }
 
-export type JSXChildren = JSXNode | JSXNode[];
+export type Props<P> = P & {
+  key?: string | number;
+  ref?: Ref<Element>;
+  children?: JSXChildren;
+};
 
 export interface JSXPortal {
   $$typeof: Symbol;
@@ -20,14 +21,12 @@ export interface JSXPortal {
   container: Element | DocumentFragment;
 }
 
-export type JSXElementTag = string | Symbol | Function;
-
 export interface JSXElement {
   $$typeof: Symbol;
-  tag: JSXElementTag;
+  type: any;
   key: Key | null;
-  ref: DOMNodeRef | null;
-  props: Props;
+  ref: Ref<Element> | null;
+  props: any;
 }
 
 export type JSXNode =
@@ -38,5 +37,7 @@ export type JSXNode =
   | boolean
   | null
   | undefined;
+
+export type JSXChildren = JSXNode | JSXNode[];
 
 export type DOMNode = Element | Text | DocumentFragment;

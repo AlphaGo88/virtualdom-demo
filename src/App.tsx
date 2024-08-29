@@ -33,7 +33,7 @@ export default defineComponent(() => {
     <>
       <h3>🌈</h3>
       <input type='text' value={name()} autofocus onInput={handleInput} />
-      <Greet name={name()} />
+      <Greet key='1' name={name()} />
       <Counter />
       <br />
       <form action=''>
