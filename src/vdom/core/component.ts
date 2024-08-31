@@ -4,7 +4,7 @@ import type { VNode } from 'core/vnode';
 import { type Effect, targetEffect } from './hooks';
 
 export interface Component {
-  $$typeof: Symbol;
+  $$typeof: symbol;
   new (props: any, ref: Ref<Element> | null): ComponentInstance;
 }
 
@@ -18,7 +18,7 @@ export interface ComponentInstance {
   receive: (props: any) => void;
 }
 
-export type PropConfig = Map<string, { watchers: Set<Effect> }>;
+export type PropWatchers = Map<string, Set<Effect>>;
 
 export let currentSetupInstance: ComponentInstance | null = null;
 
@@ -26,7 +26,7 @@ class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
 
   props: any;
-  protected _propConfig: PropConfig;
+  protected _propWatchers: PropWatchers;
 
   // this is circular
   protected _vnode: VNode | null;
@@ -37,7 +37,7 @@ class BaseComponent implements ComponentInstance {
   protected _patch: () => void;
 
   constructor() {
-    this._propConfig = new Map();
+    this._propWatchers = new Map();
     this._vnode = null;
     this._mountCallbacks = [];
     this._unmountCallbacks = [];
@@ -96,10 +96,10 @@ class BaseComponent implements ComponentInstance {
       const nextVal = nextProps[name];
 
       if (!Object.is(val, nextVal)) {
-        const config = this._propConfig.get(name);
+        const watchers = this._propWatchers.get(name);
 
         props[name] = nextVal;
-        config?.watchers.forEach(effectsToRun.add);
+        watchers?.forEach((watcher) => effectsToRun.add(watcher));
       }
     });
 
@@ -123,7 +123,7 @@ export function defineComponent<P extends object>(
     constructor(props: Props<P>, ref: Ref<Element> | null) {
       super();
 
-      const propConfig = this._propConfig;
+      const propWatchers = this._propWatchers;
       this.props = new Proxy(props ?? {}, {
         get(target, p) {
           if (typeof p !== 'string' || !target.hasOwnProperty(p)) {
@@ -131,15 +131,13 @@ export function defineComponent<P extends object>(
           }
 
           if (targetEffect.value) {
-            const config = propConfig.get(p);
+            const watchers = propWatchers.get(p);
 
             // collect watchers
-            if (config) {
-              config.watchers.add(targetEffect.value);
+            if (watchers) {
+              watchers.add(targetEffect.value);
             } else {
-              propConfig.set(p, {
-                watchers: new Set<Effect>().add(targetEffect.value),
-              });
+              propWatchers.set(p, new Set<Effect>().add(targetEffect.value));
             }
           }
 

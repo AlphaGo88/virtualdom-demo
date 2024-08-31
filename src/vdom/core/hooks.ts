@@ -26,6 +26,55 @@ function enqueueEffect(fn: Effect) {
   }
 }
 
+function reactive<T extends object>(obj: T) {
+  const keyWatchers = new Map<string, Set<Effect>>();
+
+  Object.keys(obj).forEach((key) => {
+    keyWatchers.set(key, new Set());
+
+    const value = obj[key];
+    if (Array.isArray(value)) {
+      // to do: observe array
+    } else if (value !== null && typeof value === 'object') {
+      obj[key] = reactive(value);
+    }
+  });
+
+  return new Proxy(obj, {
+    get(target, key) {
+      if (!target.hasOwnProperty(key)) {
+        return undefined;
+      }
+
+      if (typeof key === 'string' && targetEffect.value) {
+        const watchers = keyWatchers.get(key);
+        if (watchers) {
+          watchers.add(targetEffect.value);
+        }
+      }
+
+      return target[key];
+    },
+
+    set(target, key, value) {
+      const oldValue = target[key];
+      if (Object.is(value, oldValue)) {
+        return true;
+      }
+
+      target[key] = value;
+      if (typeof key === 'string') {
+        const watchers = keyWatchers.get(key);
+        if (watchers) {
+          watchers.forEach(enqueueEffect);
+        }
+      }
+
+      return true;
+    },
+  });
+}
+
 // A Ref is not reactive, it should be used to access the dom element.
 export function useRef<T>(initialValue: T): Ref<T> {
   return { value: initialValue };
@@ -53,13 +102,21 @@ export function useState<T>(initialValue: T) {
     if (!Object.is(newVal, state.value)) {
       state.value = newVal;
 
-      // watcher effects will run asynchronously
+      // effects will run asynchronously
       state.watchers.forEach(enqueueEffect);
     }
     return newVal;
   };
 
   return [getter, setter] as [() => T, (value: T | ((prev: T) => T)) => T];
+}
+
+// Use this to create deep reactive objects.
+export function useStore<T extends object>(obj: T) {
+  if (obj === null || typeof obj !== 'object') {
+    throw new Error(`${obj} is not a valid object.`);
+  }
+  return reactive(obj);
 }
 
 export function useEffect(fn: () => void) {

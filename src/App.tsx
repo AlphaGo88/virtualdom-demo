@@ -1,39 +1,41 @@
-import { defineComponent, useState } from 'vdom';
+import { defineComponent, useStore } from 'vdom';
 import Greet from './Greet';
 import Counter from './Counter';
 
 export default defineComponent(() => {
-  const [name, setName] = useState('Steve');
-  const [sex, setSex] = useState('male');
-  const [food, setFood] = useState('apple');
-  const [agree, setAgree] = useState(true);
-  const [desc, setDesc] = useState('');
+  const form = useStore({
+    name: 'Steve',
+    sex: 'male',
+    food: 'apple',
+    agree: true,
+    desc: '',
+  });
 
   function handleInput(event: Event) {
-    setName((event.target as HTMLInputElement).value);
+    form.name = (event.target as HTMLInputElement).value;
   }
 
   function handleSexChange(event: Event) {
-    setSex((event.target as HTMLInputElement).value);
+    form.sex = (event.target as HTMLInputElement).value;
   }
 
   function handleFoodChange(event: Event) {
-    setFood((event.target as HTMLSelectElement).value);
+    form.food = (event.target as HTMLSelectElement).value;
   }
 
   function handleAgreeChange(event: Event) {
-    setAgree((event.target as HTMLInputElement).checked);
+    form.agree = (event.target as HTMLInputElement).checked;
   }
 
-  function handleDescChange(event: Event) {
-    setDesc((event.target as HTMLTextAreaElement).value);
+  function handleDescInput(event: Event) {
+    form.desc = (event.target as HTMLTextAreaElement).value;
   }
 
   return () => (
     <>
       <h3>🌈</h3>
-      <input type='text' value={name()} autofocus onInput={handleInput} />
-      <Greet key='1' name={name()} />
+      <input type='text' value={form.name} autofocus onInput={handleInput} />
+      <Greet key='1' name={form.name} />
       <Counter />
       <br />
       <form action=''>
@@ -43,7 +45,7 @@ export default defineComponent(() => {
             id='male'
             name='sex'
             value='male'
-            checked={sex() === 'male'}
+            checked={form.sex === 'male'}
             onChange={handleSexChange}
           />
           <label htmlFor='male'>male</label>
@@ -52,7 +54,7 @@ export default defineComponent(() => {
             id='female'
             name='sex'
             value='female'
-            checked={sex() === 'female'}
+            checked={form.sex === 'female'}
             onChange={handleSexChange}
           />
           <label htmlFor='female'>female</label>
@@ -62,7 +64,7 @@ export default defineComponent(() => {
           <select
             id='food'
             name='food'
-            value={food()}
+            value={form.food}
             onChange={handleFoodChange}
           >
             <option value='apple'>apple</option>
@@ -77,7 +79,7 @@ export default defineComponent(() => {
             type='checkbox'
             name='agree'
             id='agree'
-            checked={agree()}
+            checked={form.agree}
             onChange={handleAgreeChange}
           />
           <label htmlFor='agree'>agree</label>
@@ -87,8 +89,8 @@ export default defineComponent(() => {
           <textarea
             name='desc'
             id='desc'
-            value={desc()}
-            onChange={handleDescChange}
+            value={form.desc}
+            onInput={handleDescInput}
           />
         </div>
       </form>

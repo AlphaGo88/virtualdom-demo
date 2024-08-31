@@ -15,14 +15,14 @@ export type Props<P> = P & {
 };
 
 export interface JSXPortal {
-  $$typeof: Symbol;
+  $$typeof: symbol;
   key: Key | null;
   children: JSXChildren;
-  container: Element | DocumentFragment;
+  container: Element;
 }
 
 export interface JSXElement {
-  $$typeof: Symbol;
+  $$typeof: symbol;
   type: any;
   key: Key | null;
   ref: Ref<Element> | null;

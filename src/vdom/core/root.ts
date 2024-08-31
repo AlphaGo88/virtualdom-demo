@@ -4,13 +4,13 @@ import { createJSXElement } from 'core/jsx';
 import { isValidContainer } from 'dom/domContainer';
 
 interface Root {
-  container: Element | DocumentFragment;
+  container: Element;
   rootVNode: VNode | null;
   render: (element: JSXNode) => void;
   unmount: () => void;
 }
 
-export function createRoot(container: Element | DocumentFragment) {
+export function createRoot(container: Element) {
   if (!isValidContainer(container)) {
     throw new Error('Target container is not a DOM element.');
   }
@@ -20,7 +20,7 @@ export function createRoot(container: Element | DocumentFragment) {
     rootVNode: null,
 
     render(element: JSXNode) {
-      container.replaceChildren();
+      container.innerHTML = '';
 
       const rootElement = createJSXElement('__root__', null, null, null);
       const rootVNode = new VNode(rootElement);
@@ -39,7 +39,7 @@ export function createRoot(container: Element | DocumentFragment) {
 
     unmount() {
       this.rootVNode?.unmount();
-      this.container.replaceChildren();
+      this.container.innerHTML = '';
     },
   };
 
