@@ -1,89 +1,82 @@
 import { COMPONENT_TYPE } from 'shared/symbols';
 import type { Ref, Props, JSXNode } from 'shared/types';
 import type { VNode } from 'core/vnode';
-import { type Effect, targetEffect } from './hooks';
+import { type Effect, targetEffect } from 'core/hooks';
 
 export interface Component {
   $$typeof: symbol;
-  new (props: any, ref: Ref<Element> | null): ComponentInstance;
+  new (props: Props, ref: Ref<Element> | null): ComponentInstance;
 }
 
 export interface ComponentInstance {
-  props: any;
+  props: Props;
   render: () => JSXNode;
   addMountCallback: (fn: () => void) => void;
   addUnmountCallback: (fn: () => void) => void;
   mount: (vnode: VNode) => void;
   unmount: () => void;
-  receive: (props: any) => void;
+  receive: (props: Props) => void;
 }
-
-export type PropWatchers = Map<string, Set<Effect>>;
 
 export let currentSetupInstance: ComponentInstance | null = null;
 
 class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
 
-  props: any;
-  protected _propWatchers: PropWatchers;
-
+  props: Props;
+  protected propWatchers: Map<string, Set<Effect>>;
   // this is circular
-  protected _vnode: VNode | null;
-
-  protected _mountCallbacks: Effect[];
-  protected _unmountCallbacks: Effect[];
-  protected _render: () => JSXNode;
-  protected _patch: () => void;
+  protected vnode: VNode | null;
+  protected mountCallbacks: Effect[];
+  protected unmountCallbacks: Effect[];
+  protected renderToJSXNode: () => JSXNode;
+  protected patch: () => void;
 
   constructor() {
-    this._propWatchers = new Map();
-    this._vnode = null;
-    this._mountCallbacks = [];
-    this._unmountCallbacks = [];
-    this._render = () => null;
-    this._patch = () => this._vnode?.patch();
+    this.props = {};
+    this.propWatchers = new Map();
+    this.vnode = null;
+    this.mountCallbacks = [];
+    this.unmountCallbacks = [];
+    this.renderToJSXNode = () => null;
+    this.patch = () => this.vnode?.patch();
   }
 
   render() {
-    targetEffect.value = this._patch;
-    const renderedElement = this._render();
+    targetEffect.value = this.patch;
+    const renderedElement = this.renderToJSXNode();
 
     targetEffect.value = null;
     return renderedElement;
   }
 
   addMountCallback(fn: () => void) {
-    this._mountCallbacks.push(fn);
+    this.mountCallbacks.push(fn);
   }
 
   addUnmountCallback(fn: () => void) {
-    this._unmountCallbacks.push(fn);
+    this.unmountCallbacks.push(fn);
   }
 
   mount(vnode: VNode) {
-    this._vnode = vnode;
+    this.vnode = vnode;
 
-    const callbacks = this._mountCallbacks;
+    const callbacks = this.mountCallbacks;
     while (callbacks.length) {
       callbacks.shift()!();
     }
   }
 
   unmount() {
-    this._vnode = null;
+    this.vnode = null;
 
-    const callbacks = this._unmountCallbacks;
+    const callbacks = this.unmountCallbacks;
     while (callbacks.length) {
       callbacks.shift()!();
     }
   }
 
-  receive(nextProps: any) {
-    if (!nextProps || typeof nextProps !== 'object') {
-      return;
-    }
-
+  receive(nextProps: Props) {
     const { props } = this;
     const propNames = new Set([
       ...Object.keys(props),
@@ -96,7 +89,7 @@ class BaseComponent implements ComponentInstance {
       const nextVal = nextProps[name];
 
       if (!Object.is(val, nextVal)) {
-        const watchers = this._propWatchers.get(name);
+        const watchers = this.propWatchers.get(name);
 
         props[name] = nextVal;
         watchers?.forEach((watcher) => effectsToRun.add(watcher));
@@ -114,7 +107,7 @@ class BaseComponent implements ComponentInstance {
  * @param setup - The setup function returns a render function
  * @returns component constructor
  */
-export function defineComponent<P extends object>(
+export function defineComponent<P = {}>(
   setup: (props: P, ref: Ref<Element> | null) => () => JSXNode
 ) {
   class Component extends BaseComponent {
@@ -123,14 +116,14 @@ export function defineComponent<P extends object>(
     constructor(props: Props<P>, ref: Ref<Element> | null) {
       super();
 
-      const propWatchers = this._propWatchers;
+      const { propWatchers } = this;
       this.props = new Proxy(props ?? {}, {
         get(target, p) {
-          if (typeof p !== 'string' || !target.hasOwnProperty(p)) {
+          if (!target.hasOwnProperty(p)) {
             return undefined;
           }
 
-          if (targetEffect.value) {
+          if (typeof p === 'string' && targetEffect.value) {
             const watchers = propWatchers.get(p);
 
             // collect watchers
@@ -143,21 +136,12 @@ export function defineComponent<P extends object>(
 
           return target[p];
         },
-
-        set(target, p, value) {
-          if (typeof p !== 'string') {
-            return false;
-          }
-
-          target[p] = value;
-          return true;
-        },
       });
 
       currentSetupInstance = this;
       // The props is reactive, users should not destructure it.
       // The 'ref' argument can be used to forward ref.
-      this._render = setup(this.props, ref);
+      this.renderToJSXNode = setup(this.props, ref);
       currentSetupInstance = null;
     }
   }

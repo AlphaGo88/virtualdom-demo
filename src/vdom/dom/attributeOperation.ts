@@ -1,3 +1,4 @@
+import { Props } from 'shared/types';
 import { type AttrInfo, AttrType, attributes } from 'dom/attributes';
 
 function getAttrInfo(propName: string) {
@@ -12,14 +13,11 @@ function isEventProp(propName: string) {
   return propName.slice(0, 2) === 'on';
 }
 
-export function updateNodeAttrs(node: Element, prevProps: any, nextProps: any) {
-  if (!prevProps || typeof prevProps !== 'object') {
-    prevProps = {};
-  }
-  if (!nextProps || typeof nextProps !== 'object') {
-    nextProps = {};
-  }
-
+export function updateNodeAttrs(
+  node: Element,
+  prevProps: Props = {},
+  nextProps: Props = {}
+) {
   for (const propName of Object.keys(nextProps)) {
     const attrInfo = getAttrInfo(propName);
     const prevValue = prevProps[propName];
@@ -65,7 +63,7 @@ export function updateNodeAttrs(node: Element, prevProps: any, nextProps: any) {
     if (nextValue == null) {
       node.removeAttribute(attrName);
     } else {
-      let attrValue: any;
+      let attrValue: string;
 
       if (
         type === AttrType.BOOLEAN ||

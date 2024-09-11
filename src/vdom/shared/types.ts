@@ -8,7 +8,7 @@ export interface Ref<T> {
   value: T | null;
 }
 
-export type Props<P> = P & {
+export type Props<P = {}> = P & {
   key?: string | number;
   ref?: Ref<Element>;
   children?: JSXChildren;
@@ -26,7 +26,7 @@ export interface JSXElement {
   type: any;
   key: Key | null;
   ref: Ref<Element> | null;
-  props: any;
+  props: Props;
 }
 
 export type JSXNode =

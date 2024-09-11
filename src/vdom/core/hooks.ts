@@ -1,5 +1,5 @@
 import type { ValueContainer, Ref } from 'shared/types';
-import { currentSetupInstance } from './component';
+import { currentSetupInstance } from 'core/component';
 
 export interface State<T> {
   value: T;
@@ -27,12 +27,11 @@ function enqueueEffect(fn: Effect) {
 }
 
 function reactive<T extends object>(obj: T) {
-  const keyWatchers = new Map<string, Set<Effect>>();
+  const watcherMap = new Map<string, Set<Effect>>();
 
-  Object.keys(obj).forEach((key) => {
-    keyWatchers.set(key, new Set());
+  Object.entries(obj).forEach(([key, value]) => {
+    watcherMap.set(key, new Set());
 
-    const value = obj[key];
     if (Array.isArray(value)) {
       // to do: observe array
     } else if (value !== null && typeof value === 'object') {
@@ -47,7 +46,7 @@ function reactive<T extends object>(obj: T) {
       }
 
       if (typeof key === 'string' && targetEffect.value) {
-        const watchers = keyWatchers.get(key);
+        const watchers = watcherMap.get(key);
         if (watchers) {
           watchers.add(targetEffect.value);
         }
@@ -64,7 +63,7 @@ function reactive<T extends object>(obj: T) {
 
       target[key] = value;
       if (typeof key === 'string') {
-        const watchers = keyWatchers.get(key);
+        const watchers = watcherMap.get(key);
         if (watchers) {
           watchers.forEach(enqueueEffect);
         }
@@ -105,6 +104,7 @@ export function useState<T>(initialValue: T) {
       // effects will run asynchronously
       state.watchers.forEach(enqueueEffect);
     }
+
     return newVal;
   };
 
@@ -113,9 +113,14 @@ export function useState<T>(initialValue: T) {
 
 // Use this to create deep reactive objects.
 export function useStore<T extends object>(obj: T) {
-  if (obj === null || typeof obj !== 'object') {
-    throw new Error(`${obj} is not a valid object.`);
+  if (obj === null) {
+    throw new Error('Invalid hook call. Target can not be null.');
   }
+
+  if (typeof obj !== 'object') {
+    throw new Error('Invalid hook call. Target is not an object.');
+  }
+
   return reactive(obj);
 }
 

@@ -1,5 +1,5 @@
 import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from 'shared/symbols';
-import type { Key, Ref, JSXElement } from 'shared/types';
+import type { Key, Ref, Props, JSXElement } from 'shared/types';
 
 const RESERVED_PROPS = {
   key: true,
@@ -35,18 +35,15 @@ export function createJSXElement(
   type: any,
   key: Key | null,
   ref: Ref<Element> | null,
-  props: any
+  props: Props
 ): JSXElement {
-  const element = {
+  return {
     $$typeof: JSX_ELEMENT_TYPE,
     type,
     key,
     ref,
     props,
   };
-
-  console.log(element);
-  return element;
 }
 
 export function jsx(type: any, config: object, maybeKey: unknown) {

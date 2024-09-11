@@ -41,10 +41,7 @@ export class VNode {
   }
 
   getDOMNode(): DOMNode | null {
-    if (this.compInstance) {
-      return this.child!.getDOMNode();
-    }
-    return this.node;
+    return this.compInstance ? this.child!.getDOMNode() : this.node;
   }
 
   mount(): DOMNode | null {
@@ -60,14 +57,14 @@ export class VNode {
     }
 
     if (isJSXElement(element)) {
-      const _element = element as JSXElement;
-      const { type } = _element;
+      const elem = element as JSXElement;
+      const { type } = elem;
 
       if (isComponentType(type)) {
-        return mountComponent(vnode, _element);
+        return mountComponent(vnode, elem);
       }
 
-      return mountElement(vnode, _element);
+      return mountElement(vnode, elem);
     }
 
     // now treat the element as text
@@ -106,7 +103,7 @@ export class VNode {
   receive(element: JSXNode) {
     if (this.compInstance) {
       // If the component instance exists,
-      // vnode.patch() may be called as a effect.
+      // vnode.patch() will be called as a effect.
       this.compInstance.receive((element as JSXElement).props);
     } else {
       this.patch(element);
@@ -116,7 +113,7 @@ export class VNode {
   /**
    * This updates the vnode and the real dom node.
    * This is called when the vnode should update which
-   * means 'nextElement' and vnode.element has same types.
+   * means 'nextElement' and vnode.element has the same type.
    * @param nextElement
    */
   patch(nextElement?: JSXNode) {
@@ -154,8 +151,8 @@ function mountComponent(vnode: VNode, element: JSXElement) {
   vnode.compInstance = compInstance;
 
   const childVNode = new VNode(compInstance.render());
-  vnode.child = childVNode;
   childVNode.parent = vnode;
+  vnode.child = childVNode;
 
   const node = childVNode.mount();
   compInstance.mount(vnode);
@@ -167,20 +164,20 @@ function mountElement(vnode: VNode, element: JSXElement) {
   const { type, ref, props } = element;
   let node: Element | DocumentFragment;
 
-  if (typeof type === 'string') {
+  if (isFragmentType(type)) {
+    // for <>...</> or <Fragment>...</Fragment>
+    node = document.createDocumentFragment();
+  } else if (typeof type === 'string') {
     node = document.createElement(type);
     if (ref) {
       ref.value = node;
     }
     updateNodeAttrs(node, {}, props);
-  } else if (isFragmentType(type)) {
-    // for <>...</> or <Fragment>...</Fragment>
-    node = document.createDocumentFragment();
   } else {
     // unknown type
     if (__DEV__) {
       console.error(
-        'Unknown element type "%s". You might import something which is not a component.',
+        'Unknown element type "%s". You might have imported something which is not a component.',
         type
       );
     }
@@ -212,10 +209,11 @@ function mountChildren(
   node: Element | DocumentFragment
 ) {
   const _children = Array.isArray(children) ? children : [children];
+  let cur: VNode;
   let pre: VNode | null = null;
 
   _children.forEach((child) => {
-    const cur = new VNode(child);
+    cur = new VNode(child);
     cur.parent = vnode;
 
     if (pre) {
@@ -267,6 +265,7 @@ function unmountChildren(vnode: VNode, removeDOMNode: boolean = false) {
         childNode.parentNode?.removeChild(childNode);
       }
     }
+
     cur = cur.nextSibling;
   }
 }
@@ -308,6 +307,7 @@ function updateComponent(vnode: VNode) {
 
     const nextNode = nextChildVNode.mount();
     const node = vnode.getDOMNode();
+
     if (node) {
       if (nextNode) {
         node.parentNode?.replaceChild(nextNode, node);
@@ -315,7 +315,7 @@ function updateComponent(vnode: VNode) {
         node.parentNode?.removeChild(node);
       }
     } else if (nextNode) {
-      // The vnode has no dom node, we need to find
+      // If the vnode has no dom node, we need to find
       // the dom parent and the next dom sibling so we can insert.
       let parent: VNode = vnode.parent!;
       let sibling: VNode | null = vnode.nextSibling;
@@ -353,13 +353,24 @@ function updateComponent(vnode: VNode) {
 function updateElement(vnode: VNode, nextElement: JSXElement) {
   const { props } = vnode.element as JSXElement;
   const { props: nextProps } = nextElement;
-  const node = vnode.getDOMNode()!;
+  const node = vnode.getDOMNode() as Element | DocumentFragment;
 
   vnode.element = nextElement;
   if (node.nodeType === Node.ELEMENT_NODE) {
     updateNodeAttrs(node as Element, props, nextProps);
   }
-  updateChildren(vnode, props.children ?? [], nextProps.children ?? [], node);
+
+  if (props.hasOwnProperty('children')) {
+    if (nextProps.hasOwnProperty('children')) {
+      updateChildren(vnode, props.children, nextProps.children, node);
+    } else {
+      unmountChildren(vnode);
+    }
+  } else {
+    if (nextProps.hasOwnProperty('children')) {
+      mountChildren(vnode, nextProps.children, node);
+    }
+  }
 }
 
 function updateText(vnode: VNode, nextElement: JSXNode) {
@@ -419,22 +430,28 @@ function updateChildren(
       const next = new VNode(nextChild);
       next.parent = vnode;
       next.nextSibling = cur.nextSibling;
+
       if (pre) {
         pre.nextSibling = next;
       }
 
-      if (childNode) {
-        node.removeChild(childNode);
-      }
-
       const nextChildNode = next.mount();
       if (nextChildNode) {
-        if (currentNodeIndex >= node.childNodes.length) {
-          node.appendChild(nextChildNode);
+        if (childNode) {
+          node.replaceChild(nextChildNode, childNode);
         } else {
-          node.insertBefore(nextChildNode, node.childNodes[currentNodeIndex]);
+          if (currentNodeIndex >= node.childNodes.length) {
+            node.appendChild(nextChildNode);
+          } else {
+            node.insertBefore(nextChildNode, node.childNodes[currentNodeIndex]);
+          }
         }
+
         currentNodeIndex++;
+      } else {
+        if (childNode) {
+          node.removeChild(childNode);
+        }
       }
     }
 

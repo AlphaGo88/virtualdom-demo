@@ -5,7 +5,7 @@ import { isValidContainer } from 'dom/domContainer';
 
 interface Root {
   container: Element;
-  rootVNode: VNode | null;
+  rootVNode: VNode;
   render: (element: JSXNode) => void;
   unmount: () => void;
 }
@@ -15,30 +15,35 @@ export function createRoot(container: Element) {
     throw new Error('Target container is not a DOM element.');
   }
 
+  const rootElement = createJSXElement('__root__', null, null, {});
+  const rootVNode = new VNode(rootElement);
+  rootVNode.node = container;
+
   const root: Root = {
     container,
-    rootVNode: null,
+    rootVNode,
 
     render(element: JSXNode) {
-      container.innerHTML = '';
+      const { rootVNode } = this;
 
-      const rootElement = createJSXElement('__root__', null, null, null);
-      const rootVNode = new VNode(rootElement);
-      rootVNode.node = container;
-      this.rootVNode = rootVNode;
+      if (rootVNode.child) {
+        rootVNode.child.receive(element);
+      } else {
+        container.innerHTML = '';
 
-      const vnode = new VNode(element);
-      vnode.parent = rootVNode;
-      rootVNode.child = vnode;
+        const vnode = new VNode(element);
+        vnode.parent = rootVNode;
+        rootVNode.child = vnode;
 
-      const node = vnode.mount();
-      if (node) {
-        container.appendChild(node);
+        const node = vnode.mount();
+        if (node) {
+          container.appendChild(node);
+        }
       }
     },
 
     unmount() {
-      this.rootVNode?.unmount();
+      this.rootVNode.unmount();
       this.container.innerHTML = '';
     },
   };
