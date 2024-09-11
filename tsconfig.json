@@ -1,5 +1,5 @@
 {
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "play/**/*"],
   "exclude": ["src/**/__tests__/*"],
   "compilerOptions": {
     "noEmit": true,
@@ -17,12 +17,12 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
     "paths": {
-      "vdom": ["./src/vdom/index"],
-      "vdom/jsx-runtime": ["./src/vdom/jsx-runtime"],
-      "vdom/jsx-dev-runtime": ["./src/vdom/jsx-dev-runtime"],
-      "core/*": ["./src/vdom/core/*"],
-      "dom/*": ["./src/vdom/dom/*"],
-      "shared/*": ["./src/vdom/shared/*"]
+      "vdom": ["./src/index"],
+      "vdom/jsx-runtime": ["./src/jsx-runtime"],
+      "vdom/jsx-dev-runtime": ["./src/jsx-dev-runtime"],
+      "core/*": ["./src/core/*"],
+      "dom/*": ["./src/dom/*"],
+      "shared/*": ["./src/shared/*"]
     }
   }
 }
