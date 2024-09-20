@@ -1,4 +1,4 @@
 import { createRoot } from 'vdom';
-import App from './App';
+import TodoApp from './TodoApp';
 
-createRoot(document.getElementById('app')!).render(<App />);
+createRoot(document.getElementById('root')!).render(<TodoApp />);

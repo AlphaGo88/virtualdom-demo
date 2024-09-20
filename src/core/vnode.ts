@@ -22,7 +22,7 @@ export class VNode {
   // This is set when the vnode represents a component instance.
   compInstance: ComponentInstance | null;
 
-  // This is set when the vnode represents a dom element or text.
+  // This is set when the vnode represents a dom node.
   node: DOMNode | null;
 
   parent: VNode | null;
@@ -57,17 +57,10 @@ export class VNode {
     }
 
     if (isJSXElement(element)) {
-      const elem = element as JSXElement;
-      const { type } = elem;
-
-      if (isComponentType(type)) {
-        return mountComponent(vnode, elem);
-      }
-
-      return mountElement(vnode, elem);
+      return mountElement(vnode, element as JSXElement);
     }
 
-    // now treat the element as text
+    // now treat the element as text string
     return mountText(vnode, element);
   }
 
@@ -84,12 +77,6 @@ export class VNode {
     }
 
     if (isJSXElement(element)) {
-      const { type } = element as JSXElement;
-
-      if (isComponentType(type)) {
-        return unmountComponent(vnode);
-      }
-
       return unmountElement(vnode);
     }
 
@@ -102,8 +89,7 @@ export class VNode {
    */
   receive(element: JSXNode) {
     if (this.compInstance) {
-      // If the component instance exists,
-      // vnode.patch() will be called as a effect.
+      // vnode.patch() will be called as an effect
       this.compInstance.receive((element as JSXElement).props);
     } else {
       this.patch(element);
@@ -112,8 +98,8 @@ export class VNode {
 
   /**
    * This updates the vnode and the real dom node.
-   * This is called when the vnode should update which
-   * means 'nextElement' and vnode.element has the same type.
+   * This is called when the vnode should update meaning
+   * 'nextElement' and vnode.element has the same type.
    * @param nextElement
    */
   patch(nextElement?: JSXNode) {
@@ -125,13 +111,7 @@ export class VNode {
     }
 
     if (isJSXElement(element)) {
-      const { type } = element as JSXElement;
-
-      if (isComponentType(type)) {
-        return updateComponent(vnode);
-      }
-
-      return updateElement(vnode, nextElement as JSXElement);
+      return updateElement(vnode, nextElement as JSXElement | null);
     }
 
     return updateText(vnode, nextElement);
@@ -145,24 +125,13 @@ function mountPortal(vnode: VNode, element: JSXPortal) {
   return null;
 }
 
-function mountComponent(vnode: VNode, element: JSXElement) {
-  const { type, ref, props } = element;
-  const compInstance = new (type as Component)(props, ref);
-  vnode.compInstance = compInstance;
-
-  const childVNode = new VNode(compInstance.render());
-  childVNode.parent = vnode;
-  vnode.child = childVNode;
-
-  const node = childVNode.mount();
-  compInstance.mount(vnode);
-
-  return node;
-}
-
 function mountElement(vnode: VNode, element: JSXElement) {
   const { type, ref, props } = element;
-  let node: Element | DocumentFragment;
+  let node: Element | DocumentFragment | null;
+
+  if (isComponentType(type)) {
+    return mountComponent(vnode, element);
+  }
 
   if (isFragmentType(type)) {
     // for <>...</> or <Fragment>...</Fragment>
@@ -182,13 +151,28 @@ function mountElement(vnode: VNode, element: JSXElement) {
       );
     }
     vnode.element = null;
-    return null;
+    node = null;
   }
 
   vnode.node = node;
-  if (props.hasOwnProperty('children')) {
+  if (node && props.hasOwnProperty('children')) {
     mountChildren(vnode, props.children, node);
   }
+
+  return node;
+}
+
+function mountComponent(vnode: VNode, element: JSXElement) {
+  const { type, ref, props } = element;
+  const compInstance = new (type as Component)(props, ref);
+  vnode.compInstance = compInstance;
+
+  const childVNode = new VNode(compInstance.render());
+  childVNode.parent = vnode;
+  vnode.child = childVNode;
+
+  const node = childVNode.mount();
+  compInstance.mount(vnode);
 
   return node;
 }
@@ -236,15 +220,21 @@ function unmountPortal(vnode: VNode) {
   unmountChildren(vnode, true);
 }
 
-function unmountComponent(vnode: VNode) {
-  vnode.compInstance?.unmount();
-  unmountChildren(vnode);
-}
-
 function unmountElement(vnode: VNode) {
+  const { type } = vnode.element as JSXElement;
+
+  if (isComponentType(type)) {
+    return unmountComponent(vnode);
+  }
+
   // We don't remove the dom node here to avoid unnecessary 'removeChild'.
   // The dom node should be removed manually.
   vnode.node = null;
+  unmountChildren(vnode);
+}
+
+function unmountComponent(vnode: VNode) {
+  vnode.compInstance?.unmount();
   unmountChildren(vnode);
 }
 
@@ -259,10 +249,10 @@ function unmountChildren(vnode: VNode, removeDOMNode: boolean = false) {
     cur.unmount();
 
     if (removeDOMNode) {
-      const childNode = cur.getDOMNode();
+      const node = cur.getDOMNode();
 
-      if (childNode) {
-        childNode.parentNode?.removeChild(childNode);
+      if (node) {
+        node.parentNode?.removeChild(node);
       }
     }
 
@@ -281,6 +271,35 @@ function updatePortal(vnode: VNode, nextElement: JSXPortal) {
     vnode.mount();
   } else {
     updateChildren(vnode, children, nextChildren, container);
+  }
+}
+
+function updateElement(vnode: VNode, nextElement: JSXElement | null) {
+  const { type } = vnode.element as JSXElement;
+
+  if (isComponentType(type)) {
+    return updateComponent(vnode);
+  }
+
+  const { props } = vnode.element as JSXElement;
+  const { props: nextProps } = nextElement as JSXElement;
+  const node = vnode.getDOMNode() as Element | DocumentFragment;
+
+  vnode.element = nextElement;
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    updateNodeAttrs(node as Element, props, nextProps);
+  }
+
+  if (props.hasOwnProperty('children')) {
+    if (nextProps.hasOwnProperty('children')) {
+      updateChildren(vnode, props.children, nextProps.children, node);
+    } else {
+      unmountChildren(vnode);
+    }
+  } else {
+    if (nextProps.hasOwnProperty('children')) {
+      mountChildren(vnode, nextProps.children, node);
+    }
   }
 }
 
@@ -346,29 +365,6 @@ function updateComponent(vnode: VNode) {
       } else {
         parentNode.appendChild(nextNode);
       }
-    }
-  }
-}
-
-function updateElement(vnode: VNode, nextElement: JSXElement) {
-  const { props } = vnode.element as JSXElement;
-  const { props: nextProps } = nextElement;
-  const node = vnode.getDOMNode() as Element | DocumentFragment;
-
-  vnode.element = nextElement;
-  if (node.nodeType === Node.ELEMENT_NODE) {
-    updateNodeAttrs(node as Element, props, nextProps);
-  }
-
-  if (props.hasOwnProperty('children')) {
-    if (nextProps.hasOwnProperty('children')) {
-      updateChildren(vnode, props.children, nextProps.children, node);
-    } else {
-      unmountChildren(vnode);
-    }
-  } else {
-    if (nextProps.hasOwnProperty('children')) {
-      mountChildren(vnode, nextProps.children, node);
     }
   }
 }
@@ -464,8 +460,11 @@ function updateChildren(
   while (i < nextChildren.length) {
     const next = new VNode(nextChildren[i]);
     next.parent = vnode;
+
     if (pre) {
       pre.nextSibling = next;
+    } else {
+      vnode.child = next;
     }
 
     const nextChildNode = next.mount();
@@ -474,5 +473,6 @@ function updateChildren(
     }
 
     pre = next;
+    i++;
   }
 }

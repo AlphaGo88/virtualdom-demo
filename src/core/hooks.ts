@@ -47,6 +47,7 @@ function reactive<T extends object>(obj: T) {
 
       if (typeof key === 'string' && targetEffect.value) {
         const watchers = watcherMap.get(key);
+
         if (watchers) {
           watchers.add(targetEffect.value);
         }
@@ -57,13 +58,16 @@ function reactive<T extends object>(obj: T) {
 
     set(target, key, value) {
       const oldValue = target[key];
+
       if (Object.is(value, oldValue)) {
         return true;
       }
 
       target[key] = value;
+
       if (typeof key === 'string') {
         const watchers = watcherMap.get(key);
+
         if (watchers) {
           watchers.forEach(enqueueEffect);
         }
@@ -74,7 +78,7 @@ function reactive<T extends object>(obj: T) {
   });
 }
 
-// A Ref is not reactive, it should be used to access the dom element.
+// A ref is not reactive, it should be used to access the dom element.
 export function useRef<T>(initialValue: T): Ref<T> {
   return { value: initialValue };
 }
@@ -113,14 +117,6 @@ export function useState<T>(initialValue: T) {
 
 // Use this to create deep reactive objects.
 export function useStore<T extends object>(obj: T) {
-  if (obj === null) {
-    throw new Error('Invalid hook call. Target can not be null.');
-  }
-
-  if (typeof obj !== 'object') {
-    throw new Error('Invalid hook call. Target is not an object.');
-  }
-
   return reactive(obj);
 }
 
@@ -147,6 +143,7 @@ export function onMount(fn: () => void) {
       'Invalid hook call. "onMount" can only be called inside setup function.'
     );
   }
+
   currentSetupInstance.addMountCallback(fn);
 }
 
@@ -156,5 +153,6 @@ export function onUnmount(fn: () => void) {
       'Invalid hook call. "onUnmount" can only be called inside setup function.'
     );
   }
+
   currentSetupInstance.addUnmountCallback(fn);
 }

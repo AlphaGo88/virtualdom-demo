@@ -15,7 +15,7 @@ export function createRoot(container: Element) {
     throw new Error('Target container is not a DOM element.');
   }
 
-  const rootElement = createJSXElement('__root__', null, null, {});
+  const rootElement = createJSXElement('__ROOT__', null, null, {});
   const rootVNode = new VNode(rootElement);
   rootVNode.node = container;
 

@@ -3,8 +3,6 @@ export enum AttrType {
   STRING,
   BOOLEAN,
   OVERLOADED_BOOLEAN,
-  NUMBER,
-  POSITIVE_NUMBER,
 }
 
 export interface AttrInfo {
@@ -97,14 +95,4 @@ attributes.value = createAttrInfo('value', 'value', AttrType.STRING, (node) =>
 // booleans, but can also accept a string value.
 ['capture', 'download'].forEach((name) => {
   attributes[name] = createAttrInfo(name, name, AttrType.OVERLOADED_BOOLEAN);
-});
-
-// These are HTML attributes that must be positive numbers.
-['cols', 'rows', 'size', 'span'].forEach((name) => {
-  attributes[name] = createAttrInfo(name, name, AttrType.POSITIVE_NUMBER);
-});
-
-// These are HTML attributes that must be numbers.
-['rowSpan', 'start'].forEach((name) => {
-  attributes[name] = createAttrInfo(name, name, AttrType.NUMBER);
 });

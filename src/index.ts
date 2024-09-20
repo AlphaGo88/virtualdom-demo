@@ -1,9 +1,10 @@
+import { createRoot } from 'core/root';
 import { createPortal } from 'core/portal';
 import { defineComponent } from 'core/component';
 import { useState, useStore, useEffect, onMount, onUnmount } from 'core/hooks';
-import { createRoot } from 'core/root';
 
 export {
+  createRoot,
   createPortal,
   defineComponent,
   useState,
@@ -11,5 +12,4 @@ export {
   useEffect,
   onMount,
   onUnmount,
-  createRoot,
 };

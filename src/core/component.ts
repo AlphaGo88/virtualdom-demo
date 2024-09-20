@@ -85,13 +85,12 @@ class BaseComponent implements ComponentInstance {
     const effectsToRun = new Set<Effect>();
 
     propNames.forEach((name) => {
-      const val = props[name];
-      const nextVal = nextProps[name];
+      const newVal = nextProps[name];
 
-      if (!Object.is(val, nextVal)) {
+      if (!Object.is(props[name], newVal)) {
         const watchers = this.propWatchers.get(name);
 
-        props[name] = nextVal;
+        props[name] = newVal;
         watchers?.forEach((watcher) => effectsToRun.add(watcher));
       }
     });
@@ -115,8 +114,8 @@ export function defineComponent<P = {}>(
 
     constructor(props: Props<P>, ref: Ref<Element> | null) {
       super();
-
       const { propWatchers } = this;
+
       this.props = new Proxy(props ?? {}, {
         get(target, p) {
           if (!target.hasOwnProperty(p)) {

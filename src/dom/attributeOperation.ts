@@ -1,10 +1,6 @@
 import { Props } from 'shared/types';
 import { type AttrInfo, AttrType, attributes } from 'dom/attributes';
 
-function getAttrInfo(propName: string) {
-  return attributes.hasOwnProperty(propName) ? attributes[propName] : null;
-}
-
 function shouldIgnoreAttr(attrInfo: AttrInfo | null) {
   return attrInfo?.type === AttrType.RESERVED;
 }
@@ -19,62 +15,77 @@ export function updateNodeAttrs(
   nextProps: Props = {}
 ) {
   for (const propName of Object.keys(nextProps)) {
-    const attrInfo = getAttrInfo(propName);
-    const prevValue = prevProps[propName];
-    const nextValue = nextProps[propName];
+    const attrInfo = attributes[propName];
+    const oldVal = prevProps[propName];
+    const newVal = nextProps[propName];
 
-    if (shouldIgnoreAttr(attrInfo) || Object.is(prevValue, nextValue)) {
+    if (shouldIgnoreAttr(attrInfo) || Object.is(oldVal, newVal)) {
       continue;
     }
 
     if (isEventProp(propName)) {
       const eventName = propName.slice(2).toLowerCase();
 
-      if (typeof prevValue === 'function') {
-        node.removeEventListener(eventName, prevValue);
+      if (typeof oldVal === 'function') {
+        node.removeEventListener(eventName, oldVal);
       }
-      if (typeof nextValue === 'function') {
-        node.addEventListener(eventName, nextValue);
+
+      if (typeof newVal === 'function') {
+        node.addEventListener(eventName, newVal);
       }
+
       continue;
     }
 
     // If the prop isn't in the special list, treat it as a simple attribute.
-    if (attrInfo === null) {
-      if (nextValue == null) {
+    if (!attrInfo) {
+      if (newVal == null) {
         node.removeAttribute(propName);
       } else {
-        node.setAttribute(propName, nextValue);
+        node.setAttribute(propName, newVal);
       }
+
       continue;
     }
 
     const { attrName, type, useIDL } = attrInfo;
 
     if (useIDL(node)) {
-      if (nextValue == null) {
+      if (newVal == null) {
         node[attrName] = type === AttrType.BOOLEAN ? false : '';
       } else {
-        node[attrName] = nextValue;
+        node[attrName] = newVal;
       }
+
       continue;
     }
 
-    if (nextValue == null) {
-      node.removeAttribute(attrName);
-    } else {
-      let attrValue: string;
-
-      if (
-        type === AttrType.BOOLEAN ||
-        (type === AttrType.OVERLOADED_BOOLEAN && nextValue === true)
-      ) {
-        attrValue = '';
+    if (type === AttrType.BOOLEAN) {
+      if (!newVal) {
+        node.removeAttribute(attrName);
       } else {
-        attrValue = '' + nextValue;
+        node.setAttribute(attrName, '');
       }
 
-      node.setAttribute(attrName, attrValue);
+      continue;
+    }
+
+    if (type === AttrType.OVERLOADED_BOOLEAN) {
+      if (newVal == null || newVal === false) {
+        node.removeAttribute(attrName);
+      } else if (newVal === true) {
+        node.setAttribute(attrName, '');
+      } else {
+        node.setAttribute(attrName, newVal);
+      }
+
+      continue;
+    }
+
+    if (newVal == null) {
+      node.removeAttribute(attrName);
+    } else {
+      node.setAttribute(attrName, newVal);
     }
   }
 }
