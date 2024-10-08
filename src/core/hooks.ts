@@ -3,7 +3,7 @@ import { currentSetupInstance } from 'core/component';
 
 export interface State<T> {
   value: T;
-  watchers: Set<Effect>;
+  effects: Set<Effect>;
 }
 
 export interface Effect {
@@ -14,7 +14,7 @@ export const targetEffect: ValueContainer<Effect | null> = { value: null };
 
 const effectQueue: Effect[] = [];
 
-function enqueueEffect(fn: Effect) {
+export function enqueueEffect(fn: Effect) {
   if (!effectQueue.includes(fn)) {
     effectQueue.push(fn);
 
@@ -26,58 +26,6 @@ function enqueueEffect(fn: Effect) {
   }
 }
 
-function reactive<T extends object>(obj: T) {
-  const watcherMap = new Map<string, Set<Effect>>();
-
-  Object.entries(obj).forEach(([key, value]) => {
-    watcherMap.set(key, new Set());
-
-    if (Array.isArray(value)) {
-      // to do: observe array
-    } else if (value !== null && typeof value === 'object') {
-      obj[key] = reactive(value);
-    }
-  });
-
-  return new Proxy(obj, {
-    get(target, key) {
-      if (!target.hasOwnProperty(key)) {
-        return undefined;
-      }
-
-      if (typeof key === 'string' && targetEffect.value) {
-        const watchers = watcherMap.get(key);
-
-        if (watchers) {
-          watchers.add(targetEffect.value);
-        }
-      }
-
-      return target[key];
-    },
-
-    set(target, key, value) {
-      const oldValue = target[key];
-
-      if (Object.is(value, oldValue)) {
-        return true;
-      }
-
-      target[key] = value;
-
-      if (typeof key === 'string') {
-        const watchers = watcherMap.get(key);
-
-        if (watchers) {
-          watchers.forEach(enqueueEffect);
-        }
-      }
-
-      return true;
-    },
-  });
-}
-
 // A ref is not reactive, it should be used to access the dom element.
 export function useRef<T>(initialValue: T): Ref<T> {
   return { value: initialValue };
@@ -86,13 +34,14 @@ export function useRef<T>(initialValue: T): Ref<T> {
 export function useState<T>(initialValue: T) {
   const state: State<T> = {
     value: initialValue,
-    watchers: new Set(),
+    effects: new Set(),
   };
 
   const getter = () => {
     if (targetEffect.value) {
-      state.watchers.add(targetEffect.value);
+      state.effects.add(targetEffect.value);
     }
+
     return state.value;
   };
 
@@ -104,9 +53,7 @@ export function useState<T>(initialValue: T) {
 
     if (!Object.is(newVal, state.value)) {
       state.value = newVal;
-
-      // effects will run asynchronously
-      state.watchers.forEach(enqueueEffect);
+      state.effects.forEach(enqueueEffect);
     }
 
     return newVal;
@@ -116,8 +63,48 @@ export function useState<T>(initialValue: T) {
 }
 
 // Use this to create deep reactive objects.
-export function useStore<T extends object>(obj: T) {
+export function useStore<T extends {}>(obj: T) {
   return reactive(obj);
+}
+
+export function useShallowStore<T extends {}>(obj: T) {
+  return reactive(obj, false);
+}
+
+function reactive<T extends {}>(obj: T, deep = true) {
+  const effectMap = new Map<string, Set<Effect>>();
+
+  const proxy = new Proxy(obj, {
+    get(target, key) {
+      if (typeof key === 'string' && targetEffect.value) {
+        if (!effectMap.get(key)) {
+          effectMap.set(key, new Set());
+        }
+
+        effectMap.get(key)!.add(targetEffect.value);
+      }
+
+      return target[key];
+    },
+
+    set(target, key, value) {
+      if (typeof key === 'string' && !Object.is(target[key], value)) {
+        effectMap.get(key)?.forEach(enqueueEffect);
+      }
+
+      return Reflect.set(target, key, value);
+    },
+  });
+
+  if (deep) {
+    Object.entries(obj).forEach(([key, value]) => {
+      if (typeof value === 'object' && value !== null) {
+        obj[key] = reactive(value);
+      }
+    });
+  }
+
+  return proxy;
 }
 
 export function useEffect(fn: () => void) {

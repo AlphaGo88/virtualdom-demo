@@ -1,7 +1,7 @@
 import { COMPONENT_TYPE } from 'shared/symbols';
 import type { Ref, Props, JSXNode } from 'shared/types';
 import type { VNode } from 'core/vnode';
-import { type Effect, targetEffect } from 'core/hooks';
+import { type Effect, enqueueEffect, targetEffect } from 'core/hooks';
 
 export interface Component {
   $$typeof: symbol;
@@ -19,14 +19,16 @@ export interface ComponentInstance {
 }
 
 export let currentSetupInstance: ComponentInstance | null = null;
+let canUpdateProps = false;
 
 class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
 
   props: Props;
-  protected propWatchers: Map<string, Set<Effect>>;
+
   // this is circular
   protected vnode: VNode | null;
+
   protected mountCallbacks: Effect[];
   protected unmountCallbacks: Effect[];
   protected renderToJSXNode: () => JSXNode;
@@ -34,7 +36,6 @@ class BaseComponent implements ComponentInstance {
 
   constructor() {
     this.props = {};
-    this.propWatchers = new Map();
     this.vnode = null;
     this.mountCallbacks = [];
     this.unmountCallbacks = [];
@@ -45,7 +46,6 @@ class BaseComponent implements ComponentInstance {
   render() {
     targetEffect.value = this.patch;
     const renderedElement = this.renderToJSXNode();
-
     targetEffect.value = null;
     return renderedElement;
   }
@@ -63,7 +63,7 @@ class BaseComponent implements ComponentInstance {
 
     const callbacks = this.mountCallbacks;
     while (callbacks.length) {
-      callbacks.shift()!();
+      enqueueEffect(callbacks.shift()!);
     }
   }
 
@@ -72,31 +72,17 @@ class BaseComponent implements ComponentInstance {
 
     const callbacks = this.unmountCallbacks;
     while (callbacks.length) {
-      callbacks.shift()!();
+      enqueueEffect(callbacks.shift()!);
     }
   }
 
   receive(nextProps: Props) {
-    const { props } = this;
-    const propNames = new Set([
-      ...Object.keys(props),
-      ...Object.keys(nextProps),
-    ]);
-    const effectsToRun = new Set<Effect>();
+    canUpdateProps = true;
 
-    propNames.forEach((name) => {
-      const newVal = nextProps[name];
-
-      if (!Object.is(props[name], newVal)) {
-        const watchers = this.propWatchers.get(name);
-
-        props[name] = newVal;
-        watchers?.forEach((watcher) => effectsToRun.add(watcher));
-      }
+    Object.keys(nextProps).forEach((key) => {
+      this.props[key] = nextProps[key];
     });
-
-    // run effects
-    effectsToRun.forEach((fn) => fn());
+    canUpdateProps = false;
   }
 }
 
@@ -106,7 +92,7 @@ class BaseComponent implements ComponentInstance {
  * @param setup - The setup function returns a render function
  * @returns component constructor
  */
-export function defineComponent<P = {}>(
+export function defineComponent<P extends {} = {}>(
   setup: (props: P, ref: Ref<Element> | null) => () => JSXNode
 ) {
   class Component extends BaseComponent {
@@ -114,36 +100,61 @@ export function defineComponent<P = {}>(
 
     constructor(props: Props<P>, ref: Ref<Element> | null) {
       super();
-      const { propWatchers } = this;
+      const effectMap = new Map<string, Set<Effect>>();
 
       this.props = new Proxy(props ?? {}, {
         get(target, p) {
-          if (!target.hasOwnProperty(p)) {
-            return undefined;
-          }
-
           if (typeof p === 'string' && targetEffect.value) {
-            const watchers = propWatchers.get(p);
-
-            // collect watchers
-            if (watchers) {
-              watchers.add(targetEffect.value);
-            } else {
-              propWatchers.set(p, new Set<Effect>().add(targetEffect.value));
+            if (!effectMap.get(p)) {
+              effectMap.set(p, new Set());
             }
+
+            // collect effects
+            effectMap.get(p)!.add(targetEffect.value);
           }
 
           return target[p];
+        },
+
+        set(target, key, value) {
+          if (!canUpdateProps) {
+            if (__DEV__) {
+              console.error(
+                'Invalid operation. Props can not be mutated manually.'
+              );
+            }
+
+            return false;
+          }
+
+          if (typeof key === 'string' && !Object.is(target[key], value)) {
+            effectMap.get(key)?.forEach(enqueueEffect);
+          }
+
+          return Reflect.set(target, key, value);
         },
       });
 
       currentSetupInstance = this;
       // The props is reactive, users should not destructure it.
-      // The 'ref' argument can be used to forward ref.
+      // The 'ref' argument can be used for ref forwarding.
       this.renderToJSXNode = setup(this.props, ref);
       currentSetupInstance = null;
     }
   }
 
   return Component;
+}
+
+export function mergeProps(target: Props, ...source: {}[]) {
+  canUpdateProps = true;
+
+  for (const src of source) {
+    Object.keys(src).forEach((key) => {
+      if (target[key] === undefined) {
+        target[key] = src[key];
+      }
+    });
+  }
+  canUpdateProps = false;
 }

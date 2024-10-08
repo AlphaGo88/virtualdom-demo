@@ -1,8 +1,6 @@
 import { createPortal, defineComponent } from 'vdom';
 import type { Todo } from './types';
 
-import './styles.css';
-
 export default defineComponent(
   (props: {
     visible: boolean;
@@ -11,33 +9,25 @@ export default defineComponent(
     onSubmit: () => void;
     onClose: () => void;
   }) => {
-    function handleInput(event: Event) {
+    function onInput(event: Event) {
       props.onChange({
         ...props.todo,
         title: (event.target as HTMLInputElement).value,
       });
     }
 
-    function handlePriorityChange(event: Event) {
+    function onPriorityChange(event: Event) {
       props.onChange({
         ...props.todo,
         priority: (event.target as HTMLInputElement).value,
       });
     }
 
-    function handleDescInput(event: Event) {
+    function onDescInput(event: Event) {
       props.onChange({
         ...props.todo,
         desc: (event.target as HTMLTextAreaElement).value,
       });
-    }
-
-    function handleSubmit() {
-      props.onSubmit();
-    }
-
-    function handleClose() {
-      props.onClose();
     }
 
     return () => {
@@ -47,7 +37,7 @@ export default defineComponent(
       const addTodo = (
         <div className='add-todo-mask' style={style}>
           <div className='add-todo'>
-            <div className='add-todo-close' onClick={handleClose}>
+            <div className='add-todo-close' onClick={props.onClose}>
               x
             </div>
 
@@ -56,48 +46,53 @@ export default defineComponent(
             <form>
               <div>
                 <input
-                  type='text'
-                  value={props.todo.title}
-                  autofocus
-                  onInput={handleInput}
-                />
-              </div>
-              <br />
-              <div>
-                <input
                   type='radio'
                   id='urgent'
                   name='priority'
                   value='urgent'
                   checked={props.todo.priority === 'urgent'}
-                  onChange={handlePriorityChange}
+                  onChange={onPriorityChange}
                 />
                 <label htmlFor='urgent'>urgent</label>
                 <input
                   type='radio'
-                  id='urgent'
+                  id='normal'
                   name='priority'
                   value='normal'
                   checked={props.todo.priority === 'normal'}
-                  onChange={handlePriorityChange}
+                  onChange={onPriorityChange}
                 />
                 <label htmlFor='normal'>normal</label>
               </div>
               <br />
               <div>
-                <textarea
-                  name='desc'
-                  id='desc'
-                  value={props.todo.desc}
-                  onInput={handleDescInput}
+                <input
+                  type='text'
+                  id='title'
+                  placeholder='title'
+                  value={props.todo.title}
+                  onInput={onInput}
                 />
               </div>
               <br />
-            </form>
+              <div>
+                <textarea
+                  placeholder='desc'
+                  rows='4'
+                  value={props.todo.desc}
+                  onInput={onDescInput}
+                />
+              </div>
+              <br />
 
-            <button disabled={!canSubmit} onClick={handleSubmit}>
-              OK
-            </button>
+              <button
+                type='button'
+                disabled={!canSubmit}
+                onClick={props.onSubmit}
+              >
+                OK
+              </button>
+            </form>
           </div>
         </div>
       );

@@ -286,6 +286,7 @@ function updateElement(vnode: VNode, nextElement: JSXElement | null) {
   const node = vnode.getDOMNode() as Element | DocumentFragment;
 
   vnode.element = nextElement;
+
   if (node.nodeType === Node.ELEMENT_NODE) {
     updateNodeAttrs(node as Element, props, nextProps);
   }
@@ -296,15 +297,14 @@ function updateElement(vnode: VNode, nextElement: JSXElement | null) {
     } else {
       unmountChildren(vnode);
     }
-  } else {
-    if (nextProps.hasOwnProperty('children')) {
-      mountChildren(vnode, nextProps.children, node);
-    }
+  } else if (nextProps.hasOwnProperty('children')) {
+    mountChildren(vnode, nextProps.children, node);
   }
 }
 
 function updateComponent(vnode: VNode) {
   const { element, compInstance } = vnode;
+
   (element as JSXElement).props = compInstance!.props;
 
   const childVNode = vnode.child!;
@@ -432,6 +432,7 @@ function updateChildren(
       }
 
       const nextChildNode = next.mount();
+
       if (nextChildNode) {
         if (childNode) {
           node.replaceChild(nextChildNode, childNode);

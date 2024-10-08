@@ -8,7 +8,7 @@ export interface Ref<T> {
   value: T | null;
 }
 
-export type Props<P = {}> = P & {
+export type Props<P extends {} = {}> = P & {
   key?: string | number;
   ref?: Ref<Element>;
   children?: JSXChildren;

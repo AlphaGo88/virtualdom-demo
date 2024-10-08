@@ -8,7 +8,7 @@ const RESERVED_PROPS = {
   __source: true,
 };
 
-function hasValidRef(config: object) {
+function hasValidRef(config: {}) {
   if (config.hasOwnProperty('ref')) {
     const ref = config['ref'];
 
@@ -46,7 +46,7 @@ export function createJSXElement(
   };
 }
 
-export function jsx(type: any, config: object, maybeKey: unknown) {
+export function jsx(type: any, config: {}, maybeKey: unknown) {
   const key = maybeKey == null ? null : '' + maybeKey;
   let ref: Ref<Element> | null = null;
   const props = {};
@@ -66,7 +66,7 @@ export function jsx(type: any, config: object, maybeKey: unknown) {
 
 export function jsxDEV(
   type: any,
-  config: object,
+  config: {},
   maybeKey: unknown,
   source: unknown,
   self: unknown
