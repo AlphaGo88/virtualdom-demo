@@ -1,38 +1,45 @@
-import { createPortal, defineComponent } from 'vdom';
+import { createPortal, defineComponent, useStore, useEffect } from 'vdom';
 import type { Todo } from './types';
 
 export default defineComponent(
   (props: {
     visible: boolean;
-    todo: Todo;
-    onChange: (todo: Todo) => void;
-    onSubmit: () => void;
+    onSubmit: (todo: Todo) => void;
     onClose: () => void;
   }) => {
-    function onInput(event: Event) {
-      props.onChange({
-        ...props.todo,
-        title: (event.target as HTMLInputElement).value,
-      });
+    const todo = useStore<Todo>({
+      title: '',
+      priority: 'normal',
+      desc: '',
+    });
+
+    useEffect(() => {
+      if (props.visible === false) {
+        todo.title = '';
+        todo.priority = 'normal';
+        todo.desc = '';
+      }
+    });
+
+    function onTitleInput(event: Event) {
+      todo.title = (event.target as HTMLInputElement).value;
     }
 
     function onPriorityChange(event: Event) {
-      props.onChange({
-        ...props.todo,
-        priority: (event.target as HTMLInputElement).value,
-      });
+      todo.priority = (event.target as HTMLInputElement).value;
     }
 
     function onDescInput(event: Event) {
-      props.onChange({
-        ...props.todo,
-        desc: (event.target as HTMLTextAreaElement).value,
-      });
+      todo.desc = (event.target as HTMLTextAreaElement).value;
+    }
+
+    function onSubmit() {
+      props.onSubmit({ ...todo });
     }
 
     return () => {
-      const canSubmit = !!props.todo.title && !!props.todo.desc;
       const style = `display: ${props.visible ? 'block' : 'none'}`;
+      const canSubmit = !!todo.title && !!todo.desc;
 
       const addTodo = (
         <div className='add-todo-mask' style={style}>
@@ -50,7 +57,7 @@ export default defineComponent(
                   id='urgent'
                   name='priority'
                   value='urgent'
-                  checked={props.todo.priority === 'urgent'}
+                  checked={todo.priority === 'urgent'}
                   onChange={onPriorityChange}
                 />
                 <label htmlFor='urgent'>urgent</label>
@@ -59,37 +66,35 @@ export default defineComponent(
                   id='normal'
                   name='priority'
                   value='normal'
-                  checked={props.todo.priority === 'normal'}
+                  checked={todo.priority === 'normal'}
                   onChange={onPriorityChange}
                 />
                 <label htmlFor='normal'>normal</label>
               </div>
               <br />
+
               <div>
                 <input
                   type='text'
                   id='title'
                   placeholder='title'
-                  value={props.todo.title}
-                  onInput={onInput}
+                  value={todo.title}
+                  onInput={onTitleInput}
                 />
               </div>
               <br />
+
               <div>
                 <textarea
                   placeholder='desc'
                   rows='4'
-                  value={props.todo.desc}
+                  value={todo.desc}
                   onInput={onDescInput}
                 />
               </div>
               <br />
 
-              <button
-                type='button'
-                disabled={!canSubmit}
-                onClick={props.onSubmit}
-              >
+              <button type='button' disabled={!canSubmit} onClick={onSubmit}>
                 OK
               </button>
             </form>

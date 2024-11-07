@@ -19,10 +19,10 @@ import { updateNodeAttrs } from 'dom/attributeOperation';
 export class VNode {
   element: JSXNode;
 
-  // This is set when the vnode represents a component instance.
+  // This is used when the vnode represents a component instance.
   compInstance: ComponentInstance | null;
 
-  // This is set when the vnode represents a dom node.
+  // This is used when the vnode represents a dom node.
   node: DOMNode | null;
 
   parent: VNode | null;
@@ -60,7 +60,7 @@ export class VNode {
       return mountElement(vnode, element as JSXElement);
     }
 
-    // now treat the element as text string
+    // now treat the element as a text string
     return mountText(vnode, element);
   }
 
@@ -98,8 +98,8 @@ export class VNode {
 
   /**
    * This updates the vnode and the real dom node.
-   * This is called when the vnode should update meaning
-   * 'nextElement' and vnode.element has the same type.
+   * It's called when the vnode should update which means
+   * 'nextElement' and vnode.element have the same type.
    * @param nextElement
    */
   patch(nextElement?: JSXNode) {
@@ -127,7 +127,7 @@ function mountPortal(vnode: VNode, element: JSXPortal) {
 
 function mountElement(vnode: VNode, element: JSXElement) {
   const { type, ref, props } = element;
-  let node: Element | DocumentFragment | null;
+  let node: Element | DocumentFragment | null = null;
 
   if (isComponentType(type)) {
     return mountComponent(vnode, element);
@@ -151,7 +151,6 @@ function mountElement(vnode: VNode, element: JSXElement) {
       );
     }
     vnode.element = null;
-    node = null;
   }
 
   vnode.node = node;
@@ -192,11 +191,14 @@ function mountChildren(
   children: JSXChildren,
   node: Element | DocumentFragment
 ) {
-  const _children = Array.isArray(children) ? children : [children];
   let cur: VNode;
   let pre: VNode | null = null;
 
-  _children.forEach((child) => {
+  if (!Array.isArray(children)) {
+    children = [children];
+  }
+
+  children.forEach((child) => {
     cur = new VNode(child);
     cur.parent = vnode;
 
@@ -228,7 +230,6 @@ function unmountElement(vnode: VNode) {
   }
 
   // We don't remove the dom node here to avoid unnecessary 'removeChild'.
-  // The dom node should be removed manually.
   vnode.node = null;
   unmountChildren(vnode);
 }
@@ -407,7 +408,10 @@ function updateChildren(
 
       if (pre) {
         pre.nextSibling = cur.nextSibling;
+      } else {
+        vnode.child = cur.nextSibling;
       }
+
       if (childNode) {
         node.removeChild(childNode);
       }

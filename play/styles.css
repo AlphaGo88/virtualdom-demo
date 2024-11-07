@@ -33,3 +33,20 @@
   width: 200px;
   font: inherit;
 }
+
+.todo-li h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 200px;
+}
+
+.todo-li textarea {
+  width: 200px;
+  font: inherit;
+}
+
+.remove-btn {
+  font-size: 12px;
+  cursor: pointer;
+}
