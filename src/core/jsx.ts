@@ -1,5 +1,6 @@
 import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from 'shared/symbols';
 import type { Key, Ref, Props, JSXElement } from 'shared/types';
+import { hasOwn } from 'shared/utils';
 
 const RESERVED_PROPS = {
   key: true,
@@ -8,8 +9,8 @@ const RESERVED_PROPS = {
   __source: true,
 };
 
-function hasValidRef(config: {}) {
-  if (config.hasOwnProperty('ref')) {
+function hasValidRef(config: object) {
+  if (hasOwn(config, 'ref')) {
     const ref = config['ref'];
 
     if (
@@ -46,7 +47,7 @@ export function createJSXElement(
   };
 }
 
-export function jsx(type: any, config: {}, maybeKey: unknown) {
+export function jsx(type: any, config: object, maybeKey: unknown) {
   const key = maybeKey == null ? null : '' + maybeKey;
   let ref: Ref<Element> | null = null;
   const props = {};
@@ -56,7 +57,7 @@ export function jsx(type: any, config: {}, maybeKey: unknown) {
   }
 
   Object.keys(config).forEach((propName) => {
-    if (!RESERVED_PROPS.hasOwnProperty(propName)) {
+    if (!hasOwn(RESERVED_PROPS, propName)) {
       props[propName] = config[propName];
     }
   });
@@ -66,7 +67,7 @@ export function jsx(type: any, config: {}, maybeKey: unknown) {
 
 export function jsxDEV(
   type: any,
-  config: {},
+  config: object,
   maybeKey: unknown,
   source: unknown,
   self: unknown
@@ -81,7 +82,7 @@ export function jsxDEV(
     }
 
     Object.keys(config).forEach((propName) => {
-      if (!RESERVED_PROPS.hasOwnProperty(propName)) {
+      if (!hasOwn(RESERVED_PROPS, propName)) {
         props[propName] = config[propName];
       }
     });

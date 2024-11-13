@@ -7,7 +7,7 @@ import {
 import type { JSXElement } from 'shared/types';
 
 export function isJSXEmpty(element: unknown) {
-  return element == null || typeof element === 'boolean';
+  return element == null;
 }
 
 export function isJSXPortal(element: unknown) {

@@ -19,16 +19,16 @@ import { updateNodeAttrs } from 'dom/attributeOperation';
 export class VNode {
   element: JSXNode;
 
-  // This is used when the vnode represents a component instance.
+  // this is used when the vnode represents a component instance
   compInstance: ComponentInstance | null;
 
-  // This is used when the vnode represents a dom node.
+  // this is used when the vnode represents a dom node
   node: DOMNode | null;
 
   parent: VNode | null;
   nextSibling: VNode | null;
 
-  // Child vnodes are organized as a linked list.
+  // child vnodes are organized as a linked list
   child: VNode | null;
 
   constructor(element: JSXNode) {
@@ -218,7 +218,7 @@ function mountChildren(
 }
 
 function unmountPortal(vnode: VNode) {
-  // Dom nodes mounted to the portal container are removed immediately.
+  // dom nodes mounted to the portal container are removed immediately
   unmountChildren(vnode, true);
 }
 
@@ -229,7 +229,7 @@ function unmountElement(vnode: VNode) {
     return unmountComponent(vnode);
   }
 
-  // We don't remove the dom node here to avoid unnecessary 'removeChild'.
+  // we don't remove the dom node here to avoid unnecessary 'removeChild'
   vnode.node = null;
   unmountChildren(vnode);
 }

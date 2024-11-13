@@ -1,24 +1,26 @@
 import { createRoot } from 'core/root';
 import { createPortal } from 'core/portal';
-import { defineComponent, mergeProps } from 'core/component';
 import {
-  useState,
-  useShallowStore,
-  useStore,
-  useEffect,
+  defineComponent,
+  mergeProps,
   onMount,
   onUnmount,
-} from 'core/hooks';
+} from 'core/component';
+import { useRef } from 'core/ref';
+import { useState } from 'core/state';
+import { useStore, useShallowStore } from 'core/store';
+import { useEffect } from 'core/effect';
 
 export {
   createRoot,
   createPortal,
   defineComponent,
   mergeProps,
-  useState,
-  useShallowStore,
-  useStore,
-  useEffect,
   onMount,
   onUnmount,
+  useRef,
+  useState,
+  useStore,
+  useShallowStore,
+  useEffect,
 };

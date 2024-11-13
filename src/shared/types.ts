@@ -1,14 +1,10 @@
-export interface ValueContainer<T> {
-  value: T;
-}
-
 export type Key = string;
 
 export interface Ref<T> {
   value: T | null;
 }
 
-export type Props<P extends {} = {}> = P & {
+export type Props<P extends object = {}> = P & {
   key?: string | number;
   ref?: Ref<Element>;
   children?: JSXChildren;

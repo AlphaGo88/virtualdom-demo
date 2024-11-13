@@ -1,7 +1,12 @@
 import { COMPONENT_TYPE } from 'shared/symbols';
 import type { Ref, Props, JSXNode } from 'shared/types';
 import type { VNode } from 'core/vnode';
-import { type Effect, enqueueEffect, targetEffect } from 'core/hooks';
+import {
+  type Effect,
+  activeEffect,
+  setActiveEffect,
+  enqueueEffect,
+} from 'core/effect';
 
 export interface Component {
   $$typeof: symbol;
@@ -44,9 +49,9 @@ class BaseComponent implements ComponentInstance {
   }
 
   render() {
-    targetEffect.value = this.patch;
+    setActiveEffect(this.patch);
     const renderedElement = this.renderToJSXNode();
-    targetEffect.value = null;
+    setActiveEffect(null);
     return renderedElement;
   }
 
@@ -87,12 +92,12 @@ class BaseComponent implements ComponentInstance {
 }
 
 /**
- * The standard way to define components
+ * The standard way to define components.
  *
- * @param setup - The setup function returns a render function
+ * @param setup - setup function must returns the render function
  * @returns component constructor
  */
-export function defineComponent<P extends {} = {}>(
+export function defineComponent<P extends object = {}>(
   setup: (props: P, ref: Ref<Element> | null) => () => JSXNode
 ) {
   class Component extends BaseComponent {
@@ -104,13 +109,13 @@ export function defineComponent<P extends {} = {}>(
 
       this.props = new Proxy(props ?? {}, {
         get(target, p) {
-          if (typeof p === 'string' && targetEffect.value) {
+          if (typeof p === 'string' && activeEffect) {
             if (!effectMap.get(p)) {
               effectMap.set(p, new Set());
             }
 
             // collect effects
-            effectMap.get(p)!.add(targetEffect.value);
+            effectMap.get(p)!.add(activeEffect);
           }
 
           return target[p];
@@ -120,7 +125,7 @@ export function defineComponent<P extends {} = {}>(
           if (!canUpdateProps) {
             if (__DEV__) {
               console.error(
-                'Invalid operation. Props can not be mutated manually.'
+                'Invalid operation. Props can not be mutated directly.'
               );
             }
 
@@ -136,8 +141,8 @@ export function defineComponent<P extends {} = {}>(
       });
 
       currentSetupInstance = this;
-      // The props is reactive, users should not destructure it.
-      // The 'ref' argument can be used for ref forwarding.
+      // props is reactive, users should not destructure it.
+      // 'ref' argument can be used for ref forwarding.
       this.renderToJSXNode = setup(this.props, ref);
       currentSetupInstance = null;
     }
@@ -157,4 +162,24 @@ export function mergeProps(target: Props, ...source: {}[]) {
     });
   }
   canUpdateProps = false;
+}
+
+export function onMount(fn: () => void) {
+  if (!currentSetupInstance) {
+    throw new Error(
+      'Invalid hook call. "onMount" can only be called inside setup function.'
+    );
+  }
+
+  currentSetupInstance.addMountCallback(fn);
+}
+
+export function onUnmount(fn: () => void) {
+  if (!currentSetupInstance) {
+    throw new Error(
+      'Invalid hook call. "onUnmount" can only be called inside setup function.'
+    );
+  }
+
+  currentSetupInstance.addUnmountCallback(fn);
 }
