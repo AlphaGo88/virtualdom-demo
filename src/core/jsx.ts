@@ -1,6 +1,6 @@
 import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from 'shared/symbols';
 import type { Key, Ref, Props, JSXElement } from 'shared/types';
-import { hasOwn } from 'shared/utils';
+import { hasOwn, isPlainObject } from 'shared/utils';
 
 const RESERVED_PROPS = {
   key: true,
@@ -13,19 +13,12 @@ function hasValidRef(config: object) {
   if (hasOwn(config, 'ref')) {
     const ref = config['ref'];
 
-    if (
-      typeof ref === 'object' &&
-      ref !== null &&
-      ref.hasOwnProperty('value')
-    ) {
+    if (isPlainObject(ref) && hasOwn(ref, 'value')) {
       return true;
     }
 
     if (__DEV__) {
-      console.error(
-        'Invalid ref "%s". Fix this by using "useRef" instead',
-        ref
-      );
+      console.error(`Invalid ref ${ref}. Fix this by using "useRef".`);
     }
   }
 
@@ -33,7 +26,7 @@ function hasValidRef(config: object) {
 }
 
 export function createJSXElement(
-  type: any,
+  type: unknown,
   key: Key | null,
   ref: Ref<Element> | null,
   props: Props
@@ -47,7 +40,7 @@ export function createJSXElement(
   };
 }
 
-export function jsx(type: any, config: object, maybeKey: unknown) {
+export function jsx(type: unknown, config: object, maybeKey: unknown) {
   const key = maybeKey == null ? null : '' + maybeKey;
   let ref: Ref<Element> | null = null;
   const props = {};
@@ -56,9 +49,9 @@ export function jsx(type: any, config: object, maybeKey: unknown) {
     ref = config['ref'];
   }
 
-  Object.keys(config).forEach((propName) => {
-    if (!hasOwn(RESERVED_PROPS, propName)) {
-      props[propName] = config[propName];
+  Object.keys(config).forEach((name) => {
+    if (!hasOwn(RESERVED_PROPS, name)) {
+      props[name] = config[name];
     }
   });
 
@@ -66,7 +59,7 @@ export function jsx(type: any, config: object, maybeKey: unknown) {
 }
 
 export function jsxDEV(
-  type: any,
+  type: unknown,
   config: object,
   maybeKey: unknown,
   source: unknown,
@@ -81,9 +74,9 @@ export function jsxDEV(
       ref = config['ref'];
     }
 
-    Object.keys(config).forEach((propName) => {
-      if (!hasOwn(RESERVED_PROPS, propName)) {
-        props[propName] = config[propName];
+    Object.keys(config).forEach((name) => {
+      if (!hasOwn(RESERVED_PROPS, name)) {
+        props[name] = config[name];
       }
     });
 

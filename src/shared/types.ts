@@ -19,7 +19,7 @@ export interface JSXPortal {
 
 export interface JSXElement {
   $$typeof: symbol;
-  type: any;
+  type: unknown;
   key: Key | null;
   ref: Ref<Element> | null;
   props: Props;

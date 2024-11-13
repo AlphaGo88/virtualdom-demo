@@ -1,5 +1,6 @@
 import { COMPONENT_TYPE } from 'shared/symbols';
 import type { Ref, Props, JSXNode } from 'shared/types';
+import { isPlainObject, isSame, isString } from 'shared/utils';
 import type { VNode } from 'core/vnode';
 import {
   type Effect,
@@ -24,12 +25,14 @@ export interface ComponentInstance {
 }
 
 export let currentSetupInstance: ComponentInstance | null = null;
-let canUpdateProps = false;
+let internallyMutateProps = false;
 
 class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
 
   props: Props;
+
+  protected effectMap: Map<string, Set<Effect>>;
 
   // this is circular
   protected vnode: VNode | null;
@@ -41,11 +44,33 @@ class BaseComponent implements ComponentInstance {
 
   constructor() {
     this.props = {};
+    this.effectMap = new Map();
     this.vnode = null;
     this.mountCallbacks = [];
     this.unmountCallbacks = [];
     this.renderToJSXNode = () => null;
     this.patch = () => this.vnode?.patch();
+  }
+
+  protected track(propName: string) {
+    const { effectMap } = this;
+
+    if (activeEffect) {
+      let effects = effectMap.get(propName);
+
+      if (!effects) {
+        effectMap.set(propName, (effects = new Set()));
+      }
+      effects.add(activeEffect);
+    }
+  }
+
+  protected trigger(propName: string, value: unknown) {
+    const { props, effectMap } = this;
+
+    if (!isSame(props[propName], value)) {
+      effectMap.get(propName)?.forEach(enqueueEffect);
+    }
   }
 
   render() {
@@ -82,12 +107,13 @@ class BaseComponent implements ComponentInstance {
   }
 
   receive(nextProps: Props) {
-    canUpdateProps = true;
+    const { props } = this;
 
+    internallyMutateProps = true;
     Object.keys(nextProps).forEach((key) => {
-      this.props[key] = nextProps[key];
+      props[key] = nextProps[key];
     });
-    canUpdateProps = false;
+    internallyMutateProps = false;
   }
 }
 
@@ -105,38 +131,42 @@ export function defineComponent<P extends object = {}>(
 
     constructor(props: Props<P>, ref: Ref<Element> | null) {
       super();
-      const effectMap = new Map<string, Set<Effect>>();
 
+      const { track, trigger } = this;
       this.props = new Proxy(props ?? {}, {
-        get(target, p) {
-          if (typeof p === 'string' && activeEffect) {
-            if (!effectMap.get(p)) {
-              effectMap.set(p, new Set());
-            }
-
-            // collect effects
-            effectMap.get(p)!.add(activeEffect);
+        get(target, key, receiver) {
+          if (isString(key)) {
+            track(key);
           }
-
-          return target[p];
+          return Reflect.get(target, key, receiver);
         },
 
-        set(target, key, value) {
-          if (!canUpdateProps) {
+        set(target, key, value, receiver) {
+          if (!internallyMutateProps) {
             if (__DEV__) {
-              console.error(
-                'Invalid operation. Props can not be mutated directly.'
-              );
+              console.error('Props can not be mutated directly.');
             }
-
             return false;
           }
 
-          if (typeof key === 'string' && !Object.is(target[key], value)) {
-            effectMap.get(key)?.forEach(enqueueEffect);
+          if (isString(key)) {
+            trigger(key, value);
           }
+          return Reflect.set(target, key, value, receiver);
+        },
 
-          return Reflect.set(target, key, value);
+        has(target, key) {
+          if (isString(key)) {
+            track(key);
+          }
+          return Reflect.has(target, key);
+        },
+
+        deleteProperty() {
+          if (__DEV__) {
+            console.error('Props can not be deleted.');
+          }
+          return false;
         },
       });
 
@@ -151,35 +181,32 @@ export function defineComponent<P extends object = {}>(
   return Component;
 }
 
-export function mergeProps(target: Props, ...source: {}[]) {
-  canUpdateProps = true;
+export function mergeProps(target: Props, ...source: object[]) {
+  if (__DEV__) {
+    if (!currentSetupInstance) {
+      console.error(
+        '"mergeProps" should not be called outside setup function.'
+      );
+    }
 
+    if (activeEffect) {
+      console.error(
+        '"mergeProps" should not be called inside render function or "useEffect".'
+      );
+    }
+  }
+
+  internallyMutateProps = true;
   for (const src of source) {
-    Object.keys(src).forEach((key) => {
-      if (target[key] === undefined) {
-        target[key] = src[key];
-      }
-    });
+    if (isPlainObject(src)) {
+      Object.keys(src).forEach((key) => {
+        if (target[key] === undefined) {
+          target[key] = src[key];
+        }
+      });
+    } else if (__DEV__) {
+      console.error(`${String(src)} can not be merged into props.`);
+    }
   }
-  canUpdateProps = false;
-}
-
-export function onMount(fn: () => void) {
-  if (!currentSetupInstance) {
-    throw new Error(
-      'Invalid hook call. "onMount" can only be called inside setup function.'
-    );
-  }
-
-  currentSetupInstance.addMountCallback(fn);
-}
-
-export function onUnmount(fn: () => void) {
-  if (!currentSetupInstance) {
-    throw new Error(
-      'Invalid hook call. "onUnmount" can only be called inside setup function.'
-    );
-  }
-
-  currentSetupInstance.addUnmountCallback(fn);
+  internallyMutateProps = false;
 }

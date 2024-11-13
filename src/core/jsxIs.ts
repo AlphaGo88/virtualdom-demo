@@ -5,25 +5,18 @@ import {
   COMPONENT_TYPE,
 } from 'shared/symbols';
 import type { JSXElement } from 'shared/types';
+import { isFunction, isObject } from 'shared/utils';
 
 export function isJSXEmpty(element: unknown) {
   return element == null;
 }
 
 export function isJSXPortal(element: unknown) {
-  return (
-    typeof element === 'object' &&
-    element !== null &&
-    element['$$typeof'] === JSX_PORTAL_TYPE
-  );
+  return isObject(element) && element['$$typeof'] === JSX_PORTAL_TYPE;
 }
 
 export function isJSXElement(element: unknown) {
-  return (
-    typeof element === 'object' &&
-    element !== null &&
-    element['$$typeof'] === JSX_ELEMENT_TYPE
-  );
+  return isObject(element) && element['$$typeof'] === JSX_ELEMENT_TYPE;
 }
 
 export function isJSXText(element: unknown) {
@@ -33,7 +26,7 @@ export function isJSXText(element: unknown) {
 }
 
 export function isComponentType(type: unknown) {
-  return typeof type === 'function' && type['$$typeof'] === COMPONENT_TYPE;
+  return isFunction(type) && type['$$typeof'] === COMPONENT_TYPE;
 }
 
 export function isFragmentType(type: unknown) {

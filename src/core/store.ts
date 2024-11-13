@@ -45,6 +45,15 @@ function createArrayInstrumentations() {
   return instrumentations;
 }
 
+function hasOwnProperty(this: object, key: unknown) {
+  const obj = toRaw(this);
+
+  if (!isNonReactiveKey(key)) {
+    track(obj, String(key));
+  }
+  return obj.hasOwnProperty(key as PropertyKey);
+}
+
 // use this to create deep reactive objects.
 export function useStore<T extends object>(obj: T) {
   return createStore(obj);
@@ -57,7 +66,7 @@ export function useShallowStore<T extends object>(obj: T) {
 function createStore<T extends object>(obj: T, deep = true) {
   if (!isObject(obj)) {
     if (__DEV__) {
-      console.error(`Can not create store on target: ${String(obj)}.`);
+      console.error(`Can not create store on target: ${obj}.`);
     }
     return obj;
   }
@@ -84,6 +93,10 @@ function createStore<T extends object>(obj: T, deep = true) {
 
       if (isArray(target) && hasOwn(arrayInstrumentations, key)) {
         return Reflect.get(arrayInstrumentations, key, receiver);
+      }
+
+      if (key === 'hasOwnProperty') {
+        return hasOwnProperty;
       }
 
       const value = Reflect.get(target, key, receiver);
@@ -128,12 +141,10 @@ function createStore<T extends object>(obj: T, deep = true) {
     },
 
     has(target, key) {
-      const result = Reflect.has(target, key);
-
       if (!isNonReactiveKey(key)) {
         track(target, key);
       }
-      return result;
+      return Reflect.has(target, key);
     },
 
     deleteProperty(target, key) {
@@ -160,7 +171,7 @@ function createStore<T extends object>(obj: T, deep = true) {
   return proxy;
 }
 
-function isNonReactiveKey(key: string | symbol) {
+function isNonReactiveKey(key: unknown) {
   return isSymbol(key) || '__proto__' === key;
 }
 

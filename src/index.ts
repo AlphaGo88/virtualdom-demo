@@ -1,11 +1,7 @@
 import { createRoot } from 'core/root';
 import { createPortal } from 'core/portal';
-import {
-  defineComponent,
-  mergeProps,
-  onMount,
-  onUnmount,
-} from 'core/component';
+import { defineComponent, mergeProps } from 'core/component';
+import { onMount, onUnmount } from 'core/lifecycle';
 import { useRef } from 'core/ref';
 import { useState } from 'core/state';
 import { useStore, useShallowStore } from 'core/store';
