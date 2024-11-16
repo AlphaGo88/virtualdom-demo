@@ -1,13 +1,13 @@
 import { COMPONENT_TYPE } from 'shared/symbols';
-import type { Ref, Props, JSXNode } from 'shared/types';
-import { isPlainObject, isSame, isString } from 'shared/utils';
+import type { Ref, Key, Props, JSXNode } from 'shared/types';
+import { wrapProps, receive } from 'core/props';
+import { type Effect, pushEffect, popEffect } from 'core/effect';
 import type { VNode } from 'core/vnode';
-import {
-  type Effect,
-  activeEffect,
-  setActiveEffect,
-  enqueueEffect,
-} from 'core/effect';
+
+type CommonJSXProps = {
+  ref?: Ref<Element> | null;
+  key?: Key;
+};
 
 export interface Component {
   $$typeof: symbol;
@@ -25,14 +25,10 @@ export interface ComponentInstance {
 }
 
 export let currentSetupInstance: ComponentInstance | null = null;
-let internallyMutateProps = false;
 
 class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
-
   props: Props;
-
-  protected effectMap: Map<string, Set<Effect>>;
 
   // this is circular
   protected vnode: VNode | null;
@@ -40,44 +36,35 @@ class BaseComponent implements ComponentInstance {
   protected mountCallbacks: Effect[];
   protected unmountCallbacks: Effect[];
   protected renderToJSXNode: () => JSXNode;
-  protected patch: () => void;
+
+  // 'render' is unique for every instance since it's regarded as an effect.
+  render: () => JSXNode;
 
   constructor() {
     this.props = {};
-    this.effectMap = new Map();
+
+    // will be set after the instance mounts.
     this.vnode = null;
+
     this.mountCallbacks = [];
     this.unmountCallbacks = [];
+
+    // will be rewritten after calling setup function.
     this.renderToJSXNode = () => null;
-    this.patch = () => this.vnode?.patch();
+
+    this.render = () => {
+      pushEffect(this.render);
+
+      const renderedElement = this.renderToJSXNode();
+      this.vnode?.updateComponent(renderedElement);
+
+      popEffect();
+      return renderedElement;
+    };
   }
 
-  protected track(propName: string) {
-    const { effectMap } = this;
-
-    if (activeEffect) {
-      let effects = effectMap.get(propName);
-
-      if (!effects) {
-        effectMap.set(propName, (effects = new Set()));
-      }
-      effects.add(activeEffect);
-    }
-  }
-
-  protected trigger(propName: string, value: unknown) {
-    const { props, effectMap } = this;
-
-    if (!isSame(props[propName], value)) {
-      effectMap.get(propName)?.forEach(enqueueEffect);
-    }
-  }
-
-  render() {
-    setActiveEffect(this.patch);
-    const renderedElement = this.renderToJSXNode();
-    setActiveEffect(null);
-    return renderedElement;
+  receive(nextProps: Props) {
+    receive(this.props, nextProps);
   }
 
   addMountCallback(fn: () => void) {
@@ -89,124 +76,47 @@ class BaseComponent implements ComponentInstance {
   }
 
   mount(vnode: VNode) {
-    this.vnode = vnode;
-
     const callbacks = this.mountCallbacks;
-    while (callbacks.length) {
-      enqueueEffect(callbacks.shift()!);
-    }
+
+    this.vnode = vnode;
+    this.mountCallbacks = [];
+    callbacks.forEach((cb) => cb());
   }
 
   unmount() {
-    this.vnode = null;
-
     const callbacks = this.unmountCallbacks;
-    while (callbacks.length) {
-      enqueueEffect(callbacks.shift()!);
-    }
-  }
 
-  receive(nextProps: Props) {
-    const { props } = this;
-
-    internallyMutateProps = true;
-    Object.keys(nextProps).forEach((key) => {
-      props[key] = nextProps[key];
-    });
-    internallyMutateProps = false;
+    this.vnode = null;
+    this.unmountCallbacks = [];
+    callbacks.forEach((cb) => cb());
   }
 }
 
 /**
  * The standard way to define components.
  *
- * @param setup - setup function must returns the render function
+ * @param setup - setup function must return a render function
  * @returns component constructor
  */
-export function defineComponent<P extends object = {}>(
+export function defineComponent<P extends Props>(
   setup: (props: P, ref: Ref<Element> | null) => () => JSXNode
 ) {
   class Component extends BaseComponent {
-    props: Props<P>;
+    props: P;
 
-    constructor(props: Props<P>, ref: Ref<Element> | null) {
+    constructor(props: CommonJSXProps & P, ref: Ref<Element> | null) {
       super();
 
-      const { track, trigger } = this;
-      this.props = new Proxy(props ?? {}, {
-        get(target, key, receiver) {
-          if (isString(key)) {
-            track(key);
-          }
-          return Reflect.get(target, key, receiver);
-        },
-
-        set(target, key, value, receiver) {
-          if (!internallyMutateProps) {
-            if (__DEV__) {
-              console.error('Props can not be mutated directly.');
-            }
-            return false;
-          }
-
-          if (isString(key)) {
-            trigger(key, value);
-          }
-          return Reflect.set(target, key, value, receiver);
-        },
-
-        has(target, key) {
-          if (isString(key)) {
-            track(key);
-          }
-          return Reflect.has(target, key);
-        },
-
-        deleteProperty() {
-          if (__DEV__) {
-            console.error('Props can not be deleted.');
-          }
-          return false;
-        },
-      });
+      // make props reactive
+      this.props = wrapProps(props ?? {}) as P;
 
       currentSetupInstance = this;
       // props is reactive, users should not destructure it.
-      // 'ref' argument can be used for ref forwarding.
-      this.renderToJSXNode = setup(this.props, ref);
+      // 'ref' can be used for ref forwarding.
+      this.renderToJSXNode = setup(this.props as P, ref);
       currentSetupInstance = null;
     }
   }
 
   return Component;
-}
-
-export function mergeProps(target: Props, ...source: object[]) {
-  if (__DEV__) {
-    if (!currentSetupInstance) {
-      console.error(
-        '"mergeProps" should not be called outside setup function.'
-      );
-    }
-
-    if (activeEffect) {
-      console.error(
-        '"mergeProps" should not be called inside render function or "useEffect".'
-      );
-    }
-  }
-
-  internallyMutateProps = true;
-  for (const src of source) {
-    if (isPlainObject(src)) {
-      Object.keys(src).forEach((key) => {
-        if (target[key] === undefined) {
-          target[key] = src[key];
-        }
-      });
-    } else if (__DEV__) {
-      console.error(`${String(src)} can not be merged into props.`);
-    }
-  }
-  internallyMutateProps = false;
 }

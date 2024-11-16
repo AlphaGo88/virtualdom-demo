@@ -4,11 +4,7 @@ export interface Ref<T> {
   value: T | null;
 }
 
-export type Props<P extends object = {}> = P & {
-  key?: string | number;
-  ref?: Ref<Element>;
-  children?: JSXChildren;
-};
+export type Props = Record<string, any>;
 
 export interface JSXPortal {
   $$typeof: symbol;

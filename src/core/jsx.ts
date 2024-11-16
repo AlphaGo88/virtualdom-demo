@@ -5,13 +5,11 @@ import { hasOwn, isPlainObject } from 'shared/utils';
 const RESERVED_PROPS = {
   key: true,
   ref: true,
-  __self: true,
-  __source: true,
 };
 
-function hasValidRef(config: object) {
+function hasValidRef(config: Props) {
   if (hasOwn(config, 'ref')) {
-    const ref = config['ref'];
+    const { ref } = config;
 
     if (isPlainObject(ref) && hasOwn(ref, 'value')) {
       return true;
@@ -40,13 +38,13 @@ export function createJSXElement(
   };
 }
 
-export function jsx(type: unknown, config: object, maybeKey: unknown) {
+function _jsx(type: unknown, config: Props, maybeKey: unknown) {
   const key = maybeKey == null ? null : '' + maybeKey;
   let ref: Ref<Element> | null = null;
-  const props = {};
+  const props: Props = {};
 
   if (hasValidRef(config)) {
-    ref = config['ref'];
+    ref = config.ref;
   }
 
   Object.keys(config).forEach((name) => {
@@ -58,30 +56,6 @@ export function jsx(type: unknown, config: object, maybeKey: unknown) {
   return createJSXElement(type, key, ref, props);
 }
 
-export function jsxDEV(
-  type: unknown,
-  config: object,
-  maybeKey: unknown,
-  source: unknown,
-  self: unknown
-) {
-  if (__DEV__) {
-    const key = maybeKey == null ? null : '' + maybeKey;
-    let ref: Ref<Element> | null = null;
-    const props = {};
-
-    if (hasValidRef(config)) {
-      ref = config['ref'];
-    }
-
-    Object.keys(config).forEach((name) => {
-      if (!hasOwn(RESERVED_PROPS, name)) {
-        props[name] = config[name];
-      }
-    });
-
-    return createJSXElement(type, key, ref, props);
-  }
-}
-
+export const jsx = _jsx;
+export const jsxDEV = _jsx;
 export { JSX_FRAGMENT_TYPE as Fragment };

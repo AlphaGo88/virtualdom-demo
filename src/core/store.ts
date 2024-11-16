@@ -1,16 +1,17 @@
-import { RAW } from 'shared/symbols';
 import {
   isObject,
   isSymbol,
   isArray,
   isIndexKey,
   hasOwn,
-  isSame,
+  hasChanged,
 } from 'shared/utils';
 import { activeEffect, resumeTracking, stopTracking } from 'core/effect';
 import { ITERATE_KEY, track, trigger, TriggerTypes } from 'core/reactiveEffect';
 
+const RAW = Symbol();
 const proxyMap = new WeakMap<object, any>();
+
 const arrayInstrumentations = createArrayInstrumentations();
 
 function createArrayInstrumentations() {
@@ -72,7 +73,7 @@ function createStore<T extends object>(obj: T, deep = true) {
   }
 
   // if target is already a proxy, return it.
-  if (obj[RAW]) {
+  if ((obj as any)[RAW]) {
     return obj;
   }
 
@@ -84,7 +85,7 @@ function createStore<T extends object>(obj: T, deep = true) {
   const proxy = new Proxy(obj, {
     get(target, key, receiver) {
       if (key === RAW) {
-        return proxy === receiver ? target : undefined;
+        return target;
       }
 
       if (isArray(target)) {
@@ -118,7 +119,7 @@ function createStore<T extends object>(obj: T, deep = true) {
 
     set(target, key, value, receiver) {
       value = toRaw(value);
-      const oldValue = toRaw(target[key]);
+      const oldValue = toRaw(target[key as keyof T]);
 
       if (isArray(target)) {
         console.log('set', key, value, oldValue);
@@ -133,7 +134,7 @@ function createStore<T extends object>(obj: T, deep = true) {
       if (proxy === receiver) {
         if (!hadKey) {
           trigger(target, TriggerTypes.ADD, key, value);
-        } else if (!isSame(value, oldValue)) {
+        } else if (hasChanged(value, oldValue)) {
           trigger(target, TriggerTypes.SET, key, value);
         }
       }
@@ -176,6 +177,5 @@ function isNonReactiveKey(key: unknown) {
 }
 
 function toRaw<T>(observed: T): T {
-  const raw = observed && observed[RAW];
-  return raw || observed;
+  return (observed && (observed as any)[RAW]) ?? observed;
 }

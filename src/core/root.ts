@@ -27,7 +27,7 @@ export function createRoot(container: Element) {
       const { rootVNode } = this;
 
       if (rootVNode.child) {
-        rootVNode.child.receive(element);
+        rootVNode.child.update(element);
       } else {
         container.innerHTML = '';
 

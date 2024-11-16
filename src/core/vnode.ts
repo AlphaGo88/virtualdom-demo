@@ -5,6 +5,7 @@ import type {
   JSXChildren,
   DOMNode,
 } from 'shared/types';
+import { hasOwn, isArray, isString } from 'shared/utils';
 import {
   isJSXEmpty,
   isJSXPortal,
@@ -80,41 +81,36 @@ export class VNode {
       return unmountElement(vnode);
     }
 
-    return unmountText(vnode);
+    unmountText(vnode);
   }
 
   /**
-   * This is called when the vnode should update as a child vnode.
-   * @param element
-   */
-  receive(element: JSXNode) {
-    if (this.compInstance) {
-      // vnode.patch() will be called as an effect
-      this.compInstance.receive((element as JSXElement).props);
-    } else {
-      this.patch(element);
-    }
-  }
-
-  /**
-   * This updates the vnode and the real dom node.
-   * It's called when the vnode should update which means
-   * 'nextElement' and vnode.element have the same type.
+   * This is called when the vnode should update.
    * @param nextElement
    */
-  patch(nextElement?: JSXNode) {
+  update(nextElement: JSXNode) {
     const vnode = this;
-    const { element } = vnode;
+    const { element, compInstance } = vnode;
+
+    if (compInstance) {
+      vnode.element = nextElement;
+      // 'updateComponent' will be called later if needed.
+      return compInstance.receive((nextElement as JSXElement).props);
+    }
 
     if (isJSXPortal(element)) {
       return updatePortal(vnode, nextElement as JSXPortal);
     }
 
     if (isJSXElement(element)) {
-      return updateElement(vnode, nextElement as JSXElement | null);
+      return updateElement(vnode, nextElement as JSXElement);
     }
 
-    return updateText(vnode, nextElement);
+    updateText(vnode, nextElement);
+  }
+
+  updateComponent(nextRenderedElement: JSXNode) {
+    updateComponent(this, nextRenderedElement);
   }
 }
 
@@ -136,7 +132,7 @@ function mountElement(vnode: VNode, element: JSXElement) {
   if (isFragmentType(type)) {
     // for <>...</> or <Fragment>...</Fragment>
     node = document.createDocumentFragment();
-  } else if (typeof type === 'string') {
+  } else if (isString(type)) {
     node = document.createElement(type);
     if (ref) {
       ref.value = node;
@@ -145,16 +141,13 @@ function mountElement(vnode: VNode, element: JSXElement) {
   } else {
     // unknown type
     if (__DEV__) {
-      console.error(
-        'Unknown element type "%s". You might have imported something which is not a component.',
-        type
-      );
+      console.error(`Unknown element type "${type}".`);
     }
     vnode.element = null;
   }
 
   vnode.node = node;
-  if (node && props.hasOwnProperty('children')) {
+  if (node && hasOwn(props, 'children')) {
     mountChildren(vnode, props.children, node);
   }
 
@@ -194,7 +187,7 @@ function mountChildren(
   let cur: VNode;
   let pre: VNode | null = null;
 
-  if (!Array.isArray(children)) {
+  if (!isArray(children)) {
     children = [children];
   }
 
@@ -251,7 +244,6 @@ function unmountChildren(vnode: VNode, removeDOMNode: boolean = false) {
 
     if (removeDOMNode) {
       const node = cur.getDOMNode();
-
       if (node) {
         node.parentNode?.removeChild(node);
       }
@@ -275,15 +267,9 @@ function updatePortal(vnode: VNode, nextElement: JSXPortal) {
   }
 }
 
-function updateElement(vnode: VNode, nextElement: JSXElement | null) {
-  const { type } = vnode.element as JSXElement;
-
-  if (isComponentType(type)) {
-    return updateComponent(vnode);
-  }
-
+function updateElement(vnode: VNode, nextElement: JSXElement) {
   const { props } = vnode.element as JSXElement;
-  const { props: nextProps } = nextElement as JSXElement;
+  const { props: nextProps } = nextElement;
   const node = vnode.getDOMNode() as Element | DocumentFragment;
 
   vnode.element = nextElement;
@@ -292,30 +278,26 @@ function updateElement(vnode: VNode, nextElement: JSXElement | null) {
     updateNodeAttrs(node as Element, props, nextProps);
   }
 
-  if (props.hasOwnProperty('children')) {
-    if (nextProps.hasOwnProperty('children')) {
+  if (hasOwn(props, 'children')) {
+    if (hasOwn(nextProps, 'children')) {
       updateChildren(vnode, props.children, nextProps.children, node);
     } else {
       unmountChildren(vnode);
     }
-  } else if (nextProps.hasOwnProperty('children')) {
+  } else if (hasOwn(nextProps, 'children')) {
     mountChildren(vnode, nextProps.children, node);
   }
 }
 
-function updateComponent(vnode: VNode) {
-  const { element, compInstance } = vnode;
-
-  (element as JSXElement).props = compInstance!.props;
-
+function updateComponent(vnode: VNode, nextRenderedElement: JSXNode) {
   const childVNode = vnode.child!;
   const child = childVNode.element;
-  const nextChild = compInstance!.render();
+  const nextChild = nextRenderedElement;
 
   if (isJSXEmpty(child) && isJSXEmpty(nextChild)) {
     // do nothing
   } else if (isSameJSXType(child, nextChild)) {
-    childVNode.receive(nextChild);
+    childVNode.update(nextChild);
   } else {
     // now we need to replace
     childVNode.unmount();
@@ -385,10 +367,10 @@ function updateChildren(
   nextChildren: JSXChildren,
   node: DOMNode
 ) {
-  if (!Array.isArray(children)) {
+  if (!isArray(children)) {
     children = [children];
   }
-  if (!Array.isArray(nextChildren)) {
+  if (!isArray(nextChildren)) {
     nextChildren = [nextChildren];
   }
 
@@ -418,7 +400,7 @@ function updateChildren(
     } else if (isJSXEmpty(child) && isJSXEmpty(nextChild)) {
       // do nothing
     } else if (isSameJSXType(child, nextChild)) {
-      cur.receive(nextChild);
+      cur.update(nextChild);
 
       if (childNode) {
         currentNodeIndex++;
@@ -436,7 +418,6 @@ function updateChildren(
       }
 
       const nextChildNode = next.mount();
-
       if (nextChildNode) {
         if (childNode) {
           node.replaceChild(nextChildNode, childNode);
@@ -447,7 +428,6 @@ function updateChildren(
             node.insertBefore(nextChildNode, node.childNodes[currentNodeIndex]);
           }
         }
-
         currentNodeIndex++;
       } else {
         if (childNode) {

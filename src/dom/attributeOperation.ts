@@ -52,9 +52,9 @@ export function updateNodeAttrs(
 
     if (useIDL(node)) {
       if (newVal == null) {
-        node[attrName] = type === AttrType.BOOLEAN ? false : '';
+        (node as any)[attrName] = type === AttrType.BOOLEAN ? false : '';
       } else {
-        node[attrName] = newVal;
+        (node as any)[attrName] = newVal;
       }
 
       continue;

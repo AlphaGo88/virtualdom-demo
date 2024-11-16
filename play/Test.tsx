@@ -1,8 +1,7 @@
 import { defineComponent, useEffect, useStore } from 'vdom';
 
 export default defineComponent(() => {
-  const obj = { a: 1 };
-  const store = useStore<{ arr: any[] }>({
+  const store = useStore({
     arr: [0, 1, 2, 3],
   });
 
@@ -15,19 +14,17 @@ export default defineComponent(() => {
   }
 
   function onSetLength() {
-    store.arr.length = 1;
+    store.arr.length = 2;
   }
 
-  return () => {
-    return (
-      <div>
-        {/* <div>{store.arr[3]}</div>
+  return () => (
+    <div>
+      {/* <div>{store.arr[3]}</div>
         <div>{store.arr[4]}</div> */}
-        <div>{store.arr.length}</div>
-        <button onClick={onPush}>push</button>
-        <button onClick={onSplice}>splice</button>
-        <button onClick={onSetLength}>set length</button>
-      </div>
-    );
-  };
+      <div>{store.arr.length}</div>
+      <button onClick={onPush}>push</button>
+      <button onClick={onSplice}>splice(1)</button>
+      <button onClick={onSetLength}>set length(2)</button>
+    </div>
+  );
 });

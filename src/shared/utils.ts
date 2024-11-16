@@ -33,6 +33,6 @@ export function hasOwn(val: object, key: string | symbol) {
   return Object.prototype.hasOwnProperty.call(val, key);
 }
 
-export function isSame(value: unknown, oldValue: unknown) {
-  return Object.is(value, oldValue);
+export function hasChanged(value: unknown, oldValue: unknown) {
+  return !Object.is(value, oldValue);
 }

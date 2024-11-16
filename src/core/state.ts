@@ -1,4 +1,4 @@
-import { isSame } from 'shared/utils';
+import { hasChanged } from 'shared/utils';
 import { type Effect, activeEffect, enqueueEffect } from 'core/effect';
 
 export interface State<T> {
@@ -27,7 +27,7 @@ export function useState<T>(
         ? (value as (prev: T) => T)(state.value)
         : value;
 
-    if (!isSame(newVal, state.value)) {
+    if (hasChanged(newVal, state.value)) {
       state.value = newVal;
       state.effects.forEach(enqueueEffect);
     }

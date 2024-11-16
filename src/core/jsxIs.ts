@@ -5,35 +5,34 @@ import {
   COMPONENT_TYPE,
 } from 'shared/symbols';
 import type { JSXElement } from 'shared/types';
-import { isFunction, isObject } from 'shared/utils';
 
-export function isJSXEmpty(element: unknown) {
+export function isJSXEmpty(element: any) {
   return element == null;
 }
 
-export function isJSXPortal(element: unknown) {
-  return isObject(element) && element['$$typeof'] === JSX_PORTAL_TYPE;
+export function isJSXPortal(element: any) {
+  return element['$$typeof'] === JSX_PORTAL_TYPE;
 }
 
-export function isJSXElement(element: unknown) {
-  return isObject(element) && element['$$typeof'] === JSX_ELEMENT_TYPE;
+export function isJSXElement(element: any) {
+  return element['$$typeof'] === JSX_ELEMENT_TYPE;
 }
 
-export function isJSXText(element: unknown) {
+export function isJSXText(element: any) {
   return (
     !isJSXEmpty(element) && !isJSXPortal(element) && !isJSXElement(element)
   );
 }
 
-export function isComponentType(type: unknown) {
-  return isFunction(type) && type['$$typeof'] === COMPONENT_TYPE;
+export function isComponentType(type: any) {
+  return type['$$typeof'] === COMPONENT_TYPE;
 }
 
-export function isFragmentType(type: unknown) {
+export function isFragmentType(type: any) {
   return type === JSX_FRAGMENT_TYPE;
 }
 
-export function isSameJSXType(prevElement: unknown, nextElement: unknown) {
+export function isSameJSXType(prevElement: any, nextElement: any) {
   if (isJSXPortal(prevElement) && isJSXPortal(nextElement)) {
     return true;
   }
