@@ -3,8 +3,8 @@ import {
   JSX_FRAGMENT_TYPE,
   JSX_PORTAL_TYPE,
   COMPONENT_TYPE,
-} from 'shared/symbols';
-import type { JSXElement } from 'shared/types';
+} from 'vdom/shared/symbols';
+import type { JSXElement } from 'vdom/shared/types';
 
 export function isJSXEmpty(element: any) {
   return element == null;

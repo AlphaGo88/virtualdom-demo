@@ -15,9 +15,6 @@ export default defineConfig(({ command }) => {
     resolve: {
       alias: {
         vdom: resolve('./src'),
-        core: resolve('./src/core'),
-        dom: resolve('./src/dom'),
-        shared: resolve('./src/shared'),
       },
     },
   };

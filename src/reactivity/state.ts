@@ -1,5 +1,5 @@
-import { hasChanged } from 'shared/utils';
-import { type Effect, activeEffect, enqueueEffect } from 'core/effect';
+import { hasChanged } from 'vdom/shared/utils';
+import { type Effect, activeEffect, enqueueEffect } from './effect';
 
 export interface State<T> {
   value: T;

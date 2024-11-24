@@ -1,12 +1,12 @@
-import { createRoot } from 'core/root';
-import { createPortal } from 'core/portal';
-import { defineComponent } from 'core/component';
-import { mergeProps } from 'core/props';
-import { onMount, onUnmount } from 'core/lifecycle';
-import { useRef } from 'core/ref';
-import { useState } from 'core/state';
-import { useMutable, useShallowMutable } from 'core/mutable';
-import { useEffect } from 'core/effect';
+import { createRoot } from 'vdom/render/root';
+import { createPortal } from 'vdom/render/portal';
+import { defineComponent } from 'vdom/render/component';
+import { mergeProps } from 'vdom/render/props';
+import { onMount, onUnmount } from 'vdom/render/lifecycle';
+import { useRef } from 'vdom/render/ref';
+import { useState } from 'vdom/reactivity/state';
+import { useMutable, useShallowMutable } from 'vdom/reactivity/mutable';
+import { useEffect } from 'vdom/reactivity/effect';
 
 export {
   createRoot,

@@ -1,6 +1,6 @@
-import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from 'shared/symbols';
-import type { Key, Ref, Props, JSXElement } from 'shared/types';
-import { hasOwn, isPlainObject } from 'shared/utils';
+import { JSX_ELEMENT_TYPE, JSX_FRAGMENT_TYPE } from 'vdom/shared/symbols';
+import type { Key, Ref, Props, JSXElement } from 'vdom/shared/types';
+import { hasOwn, isPlainObject } from 'vdom/shared/utils';
 
 const RESERVED_PROPS = {
   key: true,
@@ -56,6 +56,7 @@ function _jsx(type: unknown, config: Props, maybeKey: unknown) {
   return createJSXElement(type, key, ref, props);
 }
 
+export * from './jsxIs';
 export const jsx = _jsx;
 export const jsxDEV = _jsx;
 export { JSX_FRAGMENT_TYPE as Fragment };

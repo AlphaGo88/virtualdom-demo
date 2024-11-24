@@ -1,5 +1,5 @@
-import { currentSetupInstance } from 'core/component';
-import { activeEffect } from 'core/effect';
+import { activeEffect } from 'vdom/reactivity/effect';
+import { currentSetupInstance } from './component';
 
 export function onMount(fn: () => void) {
   if (__DEV__) {

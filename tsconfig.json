@@ -16,11 +16,9 @@
     "types": ["vite/client"],
     "paths": {
       "vdom": ["./src/index"],
-      "vdom/jsx-runtime": ["./src/jsx-runtime"],
-      "vdom/jsx-dev-runtime": ["./src/jsx-dev-runtime"],
-      "core/*": ["./src/core/*"],
-      "dom/*": ["./src/dom/*"],
-      "shared/*": ["./src/shared/*"]
+      "vdom/*": ["./src/*"]
+      // "vdom/jsx-runtime": ["./src/jsx-runtime"],
+      // "vdom/jsx-dev-runtime": ["./src/jsx-dev-runtime"]
     }
   }
 }

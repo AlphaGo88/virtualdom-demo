@@ -4,8 +4,8 @@ import type {
   JSXElement,
   JSXChildren,
   DOMNode,
-} from 'shared/types';
-import { hasOwn, isArray, isString } from 'shared/utils';
+} from 'vdom/shared/types';
+import { hasOwn, isArray, isString } from 'vdom/shared/utils';
 import {
   isJSXEmpty,
   isJSXPortal,
@@ -13,10 +13,10 @@ import {
   isComponentType,
   isFragmentType,
   isSameJSXType,
-} from 'core/jsxIs';
-import type { Component, ComponentInstance } from 'core/component';
-import { ReactiveEffect } from 'core/effect';
-import { updateNodeAttrs } from 'dom/attributeOperation';
+} from 'vdom/jsx';
+import { updateNodeAttrs } from 'vdom/dom/attributeOperation';
+import { ReactiveEffect } from 'vdom/reactivity/effect';
+import type { Component, ComponentInstance } from './component';
 
 export class VNode {
   element: JSXNode;
@@ -155,6 +155,7 @@ function mountComponent(vnode: VNode, element: JSXElement) {
       updateComponent(vnode, renderedElement);
     }
   });
+  compInstance.addUnmountCallback(() => updateEffect.cleanup());
   updateEffect.run();
 
   const childVNode = new VNode(renderedElement);

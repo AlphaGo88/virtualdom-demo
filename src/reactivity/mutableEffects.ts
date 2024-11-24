@@ -1,10 +1,10 @@
-import { isArray, isIndexKey } from 'shared/utils';
+import { isArray, isIndexKey } from 'vdom/shared/utils';
 import {
   type Effect,
   activeEffect,
   shouldTrack,
   enqueueEffect,
-} from 'core/effect';
+} from './effect';
 
 type EffectMap = Map<string | symbol, Set<Effect>>;
 const targetMap = new WeakMap<object, EffectMap>();

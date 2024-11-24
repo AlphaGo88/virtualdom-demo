@@ -1,4 +1,4 @@
-import { currentSetupInstance } from 'core/component';
+import { currentSetupInstance } from 'vdom/render/component';
 
 export interface EffectFunc {
   (): void | (() => void);

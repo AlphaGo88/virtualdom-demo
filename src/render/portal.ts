@@ -1,6 +1,6 @@
-import { JSX_PORTAL_TYPE } from 'shared/symbols';
-import type { JSXChildren, JSXPortal } from 'shared/types';
-import { isValidContainer } from 'dom/domContainer';
+import { JSX_PORTAL_TYPE } from 'vdom/shared/symbols';
+import type { JSXChildren, JSXPortal } from 'vdom/shared/types';
+import { isValidContainer } from 'vdom/dom/domContainer';
 
 export function createPortal(
   children: JSXChildren,

@@ -1,5 +1,5 @@
-import { Props } from 'shared/types';
-import { type AttrInfo, AttrType, attributes } from 'dom/attributes';
+import { Props } from 'vdom/shared/types';
+import { type AttrInfo, AttrType, attributes } from './attributes';
 
 function shouldIgnoreAttr(attrInfo: AttrInfo | null) {
   return attrInfo?.type === AttrType.RESERVED;

@@ -1,7 +1,7 @@
-import { Props } from 'shared/types';
-import { isString, isPlainObject, hasChanged, hasOwn } from 'shared/utils';
-import { currentSetupInstance } from 'core/component';
-import { type Effect, activeEffect } from 'core/effect';
+import { Props } from 'vdom/shared/types';
+import { isString, isPlainObject, hasChanged, hasOwn } from 'vdom/shared/utils';
+import { type Effect, activeEffect } from 'vdom/reactivity/effect';
+import { currentSetupInstance } from './component';
 
 const RAW = Symbol();
 

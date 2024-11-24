@@ -1,7 +1,7 @@
-import type { JSXNode } from 'shared/types';
-import { VNode } from 'core/vnode';
-import { createJSXElement } from 'core/jsx';
-import { isValidContainer } from 'dom/domContainer';
+import type { JSXNode } from 'vdom/shared/types';
+import { createJSXElement } from 'vdom/jsx';
+import { isValidContainer } from 'vdom/dom/domContainer';
+import { VNode } from './vnode';
 
 interface Root {
   container: Element;
@@ -32,8 +32,8 @@ export function createRoot(container: Element) {
         container.innerHTML = '';
 
         const vnode = new VNode(element);
-        vnode.parent = rootVNode;
         rootVNode.child = vnode;
+        vnode.parent = rootVNode;
 
         const node = vnode.mount();
         if (node) {

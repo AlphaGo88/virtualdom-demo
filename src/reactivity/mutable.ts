@@ -5,9 +5,9 @@ import {
   isIndexKey,
   hasOwn,
   hasChanged,
-} from 'shared/utils';
-import { activeEffect, resumeTracking, stopTracking } from 'core/effect';
-import { ITERATE_KEY, track, trigger, TriggerTypes } from 'core/mutableEffects';
+} from 'vdom/shared/utils';
+import { activeEffect, resumeTracking, stopTracking } from './effect';
+import { ITERATE_KEY, track, trigger, TriggerTypes } from './mutableEffects';
 
 const RAW = Symbol();
 const proxyMap = new WeakMap<object, any>();

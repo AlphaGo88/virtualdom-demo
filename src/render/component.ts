@@ -1,6 +1,6 @@
-import { COMPONENT_TYPE } from 'shared/symbols';
-import type { Ref, Props, JSXNode } from 'shared/types';
-import { wrapProps, updateProps } from 'core/props';
+import { COMPONENT_TYPE } from 'vdom/shared/symbols';
+import type { Ref, Props, JSXNode } from 'vdom/shared/types';
+import { wrapProps, updateProps } from './props';
 
 type CommonJSXProps = {
   key?: string | number;
