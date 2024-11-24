@@ -15,30 +15,26 @@ import {
   isSameJSXType,
 } from 'core/jsxIs';
 import type { Component, ComponentInstance } from 'core/component';
+import { ReactiveEffect } from 'core/effect';
 import { updateNodeAttrs } from 'dom/attributeOperation';
 
 export class VNode {
   element: JSXNode;
 
   // this is used when the vnode represents a component instance
-  compInstance: ComponentInstance | null;
+  compInstance: ComponentInstance | null = null;
 
   // this is used when the vnode represents a dom node
-  node: DOMNode | null;
+  node: DOMNode | null = null;
 
-  parent: VNode | null;
-  nextSibling: VNode | null;
+  parent: VNode | null = null;
+  nextSibling: VNode | null = null;
 
   // child vnodes are organized as a linked list
-  child: VNode | null;
+  child: VNode | null = null;
 
   constructor(element: JSXNode) {
     this.element = element;
-    this.compInstance = null;
-    this.node = null;
-    this.parent = null;
-    this.nextSibling = null;
-    this.child = null;
   }
 
   getDOMNode(): DOMNode | null {
@@ -47,7 +43,7 @@ export class VNode {
 
   mount(): DOMNode | null {
     const vnode = this;
-    const { element } = vnode;
+    let { element } = vnode;
 
     if (isJSXEmpty(element)) {
       return null;
@@ -58,7 +54,14 @@ export class VNode {
     }
 
     if (isJSXElement(element)) {
-      return mountElement(vnode, element as JSXElement);
+      element = element as JSXElement;
+      const { type } = element;
+
+      if (isComponentType(type)) {
+        return mountComponent(vnode, element);
+      }
+
+      return mountElement(vnode, element);
     }
 
     // now treat the element as a text string
@@ -67,21 +70,20 @@ export class VNode {
 
   unmount() {
     const vnode = this;
-    const { element } = vnode;
+    const { element, compInstance } = vnode;
 
-    if (isJSXEmpty(element)) {
-      return;
+    vnode.parent = null;
+    vnode.node = null;
+
+    if (compInstance) {
+      compInstance.unmount();
+    } else if (isJSXPortal(element)) {
+      // dom nodes mounted to the portal container are removed immediately
+      unmountChildren(vnode, true);
+    } else if (isJSXElement(element)) {
+      // we don't remove the dom node here to avoid unnecessary 'removeChild'
+      unmountChildren(vnode);
     }
-
-    if (isJSXPortal(element)) {
-      return unmountPortal(vnode);
-    }
-
-    if (isJSXElement(element)) {
-      return unmountElement(vnode);
-    }
-
-    unmountText(vnode);
   }
 
   /**
@@ -94,23 +96,15 @@ export class VNode {
 
     if (compInstance) {
       vnode.element = nextElement;
-      // 'updateComponent' will be called later if needed.
-      return compInstance.receive((nextElement as JSXElement).props);
+      // this will trigger update effect if necessary.
+      compInstance.receive((nextElement as JSXElement).props);
+    } else if (isJSXPortal(element)) {
+      updatePortal(vnode, nextElement as JSXPortal);
+    } else if (isJSXElement(element)) {
+      updateElement(vnode, nextElement as JSXElement);
+    } else {
+      updateText(vnode, nextElement);
     }
-
-    if (isJSXPortal(element)) {
-      return updatePortal(vnode, nextElement as JSXPortal);
-    }
-
-    if (isJSXElement(element)) {
-      return updateElement(vnode, nextElement as JSXElement);
-    }
-
-    updateText(vnode, nextElement);
-  }
-
-  updateComponent(nextRenderedElement: JSXNode) {
-    updateComponent(this, nextRenderedElement);
   }
 }
 
@@ -124,10 +118,6 @@ function mountPortal(vnode: VNode, element: JSXPortal) {
 function mountElement(vnode: VNode, element: JSXElement) {
   const { type, ref, props } = element;
   let node: Element | DocumentFragment | null = null;
-
-  if (isComponentType(type)) {
-    return mountComponent(vnode, element);
-  }
 
   if (isFragmentType(type)) {
     // for <>...</> or <Fragment>...</Fragment>
@@ -150,7 +140,6 @@ function mountElement(vnode: VNode, element: JSXElement) {
   if (node && hasOwn(props, 'children')) {
     mountChildren(vnode, props.children, node);
   }
-
   return node;
 }
 
@@ -159,12 +148,22 @@ function mountComponent(vnode: VNode, element: JSXElement) {
   const compInstance = new (type as Component)(props, ref);
   vnode.compInstance = compInstance;
 
-  const childVNode = new VNode(compInstance.render());
-  childVNode.parent = vnode;
+  let renderedElement: JSXNode;
+  const updateEffect = new ReactiveEffect(() => {
+    renderedElement = compInstance.render();
+    if (vnode.child) {
+      updateComponent(vnode, renderedElement);
+    }
+  });
+  updateEffect.run();
+
+  const childVNode = new VNode(renderedElement);
   vnode.child = childVNode;
+  childVNode.parent = vnode;
 
   const node = childVNode.mount();
-  compInstance.mount(vnode);
+  // trigger 'mount' after the dom node is created
+  compInstance.mount();
 
   return node;
 }
@@ -210,45 +209,16 @@ function mountChildren(
   });
 }
 
-function unmountPortal(vnode: VNode) {
-  // dom nodes mounted to the portal container are removed immediately
-  unmountChildren(vnode, true);
-}
-
-function unmountElement(vnode: VNode) {
-  const { type } = vnode.element as JSXElement;
-
-  if (isComponentType(type)) {
-    return unmountComponent(vnode);
-  }
-
-  // we don't remove the dom node here to avoid unnecessary 'removeChild'
-  vnode.node = null;
-  unmountChildren(vnode);
-}
-
-function unmountComponent(vnode: VNode) {
-  vnode.compInstance?.unmount();
-  unmountChildren(vnode);
-}
-
-function unmountText(vnode: VNode) {
-  vnode.node = null;
-}
-
 function unmountChildren(vnode: VNode, removeDOMNode: boolean = false) {
   let cur = vnode.child;
 
   while (cur) {
+    const node = cur.getDOMNode();
+
     cur.unmount();
-
     if (removeDOMNode) {
-      const node = cur.getDOMNode();
-      if (node) {
-        node.parentNode?.removeChild(node);
-      }
+      node?.parentNode?.removeChild(node);
     }
-
     cur = cur.nextSibling;
   }
 }
@@ -259,7 +229,7 @@ function updatePortal(vnode: VNode, nextElement: JSXPortal) {
 
   if (container !== nextContainer) {
     // If the container is changed, we need to rebuild the portal.
-    vnode.unmount();
+    unmountChildren(vnode, true);
     vnode.element = nextElement;
     vnode.mount();
   } else {
@@ -388,10 +358,12 @@ function updateChildren(
       // remove child if necessary
       cur.unmount();
 
-      if (pre) {
-        pre.nextSibling = cur.nextSibling;
-      } else {
-        vnode.child = cur.nextSibling;
+      if (i === nextChildren.length) {
+        if (pre) {
+          pre.nextSibling = null;
+        } else {
+          vnode.child = null;
+        }
       }
 
       if (childNode) {
@@ -415,6 +387,8 @@ function updateChildren(
 
       if (pre) {
         pre.nextSibling = next;
+      } else {
+        vnode.child = next;
       }
 
       const nextChildNode = next.mount();
@@ -429,11 +403,11 @@ function updateChildren(
           }
         }
         currentNodeIndex++;
-      } else {
-        if (childNode) {
-          node.removeChild(childNode);
-        }
+      } else if (childNode) {
+        node.removeChild(childNode);
       }
+
+      cur = next;
     }
 
     pre = cur;

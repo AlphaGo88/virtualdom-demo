@@ -1,23 +1,44 @@
 import { currentSetupInstance } from 'core/component';
 
+export interface EffectFunc {
+  (): void | (() => void);
+}
+
 export interface Effect {
-  (): void;
+  run: () => void;
 }
 
 const asyncQueue: Effect[] = [];
-const runStack: Effect[] = [];
 
 export let activeEffect: Effect | undefined;
 export let shouldTrack = true;
 
-export function pushEffect(effect: Effect) {
-  runStack.push(effect);
-  activeEffect = effect;
-}
+export class ReactiveEffect implements Effect {
+  private fn: EffectFunc;
+  private cleanupFn: (() => void) | null = null;
 
-export function popEffect() {
-  runStack.pop();
-  activeEffect = runStack[runStack.length - 1];
+  constructor(fn: EffectFunc) {
+    this.fn = fn;
+  }
+
+  run() {
+    let lastShouldTrack = shouldTrack;
+    let lastEffect = activeEffect;
+
+    try {
+      shouldTrack = true;
+      activeEffect = this;
+      this.cleanup();
+      this.cleanupFn = this.fn() ?? null;
+    } finally {
+      activeEffect = lastEffect;
+      shouldTrack = lastShouldTrack;
+    }
+  }
+
+  cleanup() {
+    this.cleanupFn?.();
+  }
 }
 
 export function stopTracking() {
@@ -34,29 +55,26 @@ export function enqueueEffect(effect: Effect) {
 
     Promise.resolve().then(() => {
       while (asyncQueue.length) {
-        asyncQueue.shift()!();
+        asyncQueue.shift()!.run();
       }
     });
   }
 }
 
-export function useEffect(fn: () => void) {
-  const effect = () => {
-    pushEffect(effect);
-    fn();
-    popEffect();
-  };
-
-  if (__DEV__ && activeEffect) {
-    console.error(
-      '"useEffect" should not be called inside render function or "useEffect".'
-    );
-  }
-
-  if (currentSetupInstance) {
-    // effects defined inside component run when the component mounts.
-    currentSetupInstance.addMountCallback(effect);
+export function useEffect(fn: () => void | (() => void)) {
+  if (!currentSetupInstance) {
+    if (__DEV__) {
+      console.error('"useEffect" should not be called outside setup function.');
+    }
   } else {
-    effect();
+    if (__DEV__ && activeEffect) {
+      console.error(
+        '"useEffect" should not be called inside render function or "useEffect".'
+      );
+    }
+    const effect = new ReactiveEffect(fn);
+
+    currentSetupInstance.addMountCallback(() => effect.run());
+    currentSetupInstance.addUnmountCallback(() => effect.cleanup());
   }
 }

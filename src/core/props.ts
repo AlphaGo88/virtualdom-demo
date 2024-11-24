@@ -1,5 +1,5 @@
 import { Props } from 'shared/types';
-import { isString, isPlainObject, hasChanged } from 'shared/utils';
+import { isString, isPlainObject, hasChanged, hasOwn } from 'shared/utils';
 import { currentSetupInstance } from 'core/component';
 import { type Effect, activeEffect } from 'core/effect';
 
@@ -36,42 +36,46 @@ export function wrapProps(props: Props) {
         return target;
       }
 
-      if (isString(key)) {
+      if (isString(key) && hasOwn(target, key)) {
         track(target, key);
       }
       return Reflect.get(target, key, receiver);
+    },
+
+    defineProperty() {
+      if (__DEV__) {
+        console.error('Props is not configurable.');
+      }
+      return true;
     },
 
     set() {
       if (__DEV__) {
         console.error('Props can not be mutated directly.');
       }
-      return false;
-    },
-
-    has(target, key) {
-      if (isString(key)) {
-        track(target, key);
-      }
-      return Reflect.has(target, key);
+      return true;
     },
 
     deleteProperty() {
       if (__DEV__) {
         console.error('Props can not be mutated directly.');
       }
-      return false;
+      return true;
     },
   });
 }
 
+function toRaw(observed: any) {
+  return observed?.[RAW] ?? observed;
+}
+
 function internalWriteProps(props: Props, key: string, value: unknown) {
-  const raw = (props as any)[RAW] || props;
+  const raw = toRaw(props);
   raw[key] = value;
 }
 
-export function receive(props: Props, nextProps: Props) {
-  const effectMap = targetMap.get(props);
+export function updateProps(props: Props, nextProps: Props) {
+  const effectMap = targetMap.get(toRaw(props));
   const effectsToRun = new Set<Effect>();
 
   Object.keys(nextProps).forEach((key) => {
@@ -80,15 +84,15 @@ export function receive(props: Props, nextProps: Props) {
 
     if (hasChanged(oldVal, newVal)) {
       internalWriteProps(props, key, newVal);
-      effectMap?.get(key)?.forEach(effectsToRun.add);
+      effectMap?.get(key)?.forEach((effect) => effectsToRun.add(effect));
     }
   });
 
   // effects run immediately
-  effectsToRun.forEach((effect) => effect());
+  effectsToRun.forEach((effect) => effect.run());
 }
 
-export function mergeProps(target: Props, ...source: Props[]) {
+export function mergeProps<P extends Props>(target: P, ...source: P[]) {
   if (__DEV__ && !currentSetupInstance) {
     console.error('"mergeProps" should not be called outside setup function.');
   }

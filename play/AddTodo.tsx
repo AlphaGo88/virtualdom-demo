@@ -1,4 +1,4 @@
-import { createPortal, defineComponent, useStore, useEffect } from 'vdom';
+import { createPortal, defineComponent, useMutable, useEffect } from 'vdom';
 import type { Todo } from './types';
 
 export default defineComponent(
@@ -7,7 +7,7 @@ export default defineComponent(
     onSubmit: (todo: Todo) => void;
     onClose: () => void;
   }) => {
-    const todo = useStore<Todo>({
+    const todo = useMutable<Todo>({
       title: '',
       priority: 'normal',
       desc: '',

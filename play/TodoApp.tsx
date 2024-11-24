@@ -1,10 +1,10 @@
-import { defineComponent, useEffect, useStore } from 'vdom';
+import { defineComponent, useEffect, useMutable } from 'vdom';
 import type { Todo } from './types';
 import AddTodo from './AddTodo';
 import './styles.css';
 
 export default defineComponent(() => {
-  const store = useStore<{
+  const store = useMutable<{
     todoList: Todo[];
     addTodoVisible: boolean;
     editIndex: number;

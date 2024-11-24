@@ -1,12 +1,10 @@
 import { COMPONENT_TYPE } from 'shared/symbols';
-import type { Ref, Key, Props, JSXNode } from 'shared/types';
-import { wrapProps, receive } from 'core/props';
-import { type Effect, pushEffect, popEffect } from 'core/effect';
-import type { VNode } from 'core/vnode';
+import type { Ref, Props, JSXNode } from 'shared/types';
+import { wrapProps, updateProps } from 'core/props';
 
 type CommonJSXProps = {
-  ref?: Ref<Element> | null;
-  key?: Key;
+  key?: string | number;
+  ref?: Ref<Element>;
 };
 
 export interface Component {
@@ -19,7 +17,7 @@ export interface ComponentInstance {
   render: () => JSXNode;
   addMountCallback: (fn: () => void) => void;
   addUnmountCallback: (fn: () => void) => void;
-  mount: (vnode: VNode) => void;
+  mount: () => void;
   unmount: () => void;
   receive: (props: Props) => void;
 }
@@ -28,43 +26,23 @@ export let currentSetupInstance: ComponentInstance | null = null;
 
 class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
-  props: Props;
 
-  // this is circular
-  protected vnode: VNode | null;
+  props: Props = {};
+  mountCallbacks: (() => void)[] = [];
+  unmountCallbacks: (() => void)[] = [];
 
-  protected mountCallbacks: Effect[];
-  protected unmountCallbacks: Effect[];
-  protected renderToJSXNode: () => JSXNode;
+  // will be rewritten after calling setup function
+  render: () => JSXNode = () => null;
 
-  // 'render' is unique for every instance since it's regarded as an effect.
-  render: () => JSXNode;
-
-  constructor() {
-    this.props = {};
-
-    // will be set after the instance mounts.
-    this.vnode = null;
-
-    this.mountCallbacks = [];
-    this.unmountCallbacks = [];
-
-    // will be rewritten after calling setup function.
-    this.renderToJSXNode = () => null;
-
-    this.render = () => {
-      pushEffect(this.render);
-
-      const renderedElement = this.renderToJSXNode();
-      this.vnode?.updateComponent(renderedElement);
-
-      popEffect();
-      return renderedElement;
-    };
-  }
+  // constructor() {
+  //   this.renderEffect = new ReactiveEffect(() => {
+  //     this.renderedElement = this.renderToJSXNode();
+  //     this.vnode?.updateComponent(this.renderedElement);
+  //   });
+  // }
 
   receive(nextProps: Props) {
-    receive(this.props, nextProps);
+    updateProps(this.props, nextProps);
   }
 
   addMountCallback(fn: () => void) {
@@ -75,10 +53,9 @@ class BaseComponent implements ComponentInstance {
     this.unmountCallbacks.push(fn);
   }
 
-  mount(vnode: VNode) {
+  mount() {
     const callbacks = this.mountCallbacks;
 
-    this.vnode = vnode;
     this.mountCallbacks = [];
     callbacks.forEach((cb) => cb());
   }
@@ -86,7 +63,6 @@ class BaseComponent implements ComponentInstance {
   unmount() {
     const callbacks = this.unmountCallbacks;
 
-    this.vnode = null;
     this.unmountCallbacks = [];
     callbacks.forEach((cb) => cb());
   }
@@ -101,7 +77,7 @@ class BaseComponent implements ComponentInstance {
 export function defineComponent<P extends Props>(
   setup: (props: P, ref: Ref<Element> | null) => () => JSXNode
 ) {
-  class Component extends BaseComponent {
+  return class extends BaseComponent {
     props: P;
 
     constructor(props: CommonJSXProps & P, ref: Ref<Element> | null) {
@@ -113,10 +89,8 @@ export function defineComponent<P extends Props>(
       currentSetupInstance = this;
       // props is reactive, users should not destructure it.
       // 'ref' can be used for ref forwarding.
-      this.renderToJSXNode = setup(this.props as P, ref);
+      this.render = setup(this.props, ref);
       currentSetupInstance = null;
     }
-  }
-
-  return Component;
+  };
 }

@@ -1,7 +1,7 @@
-import { defineComponent, useEffect, useStore } from 'vdom';
+import { defineComponent, useEffect, useMutable } from 'vdom';
 
 export default defineComponent(() => {
-  const store = useStore({
+  const store = useMutable({
     arr: [0, 1, 2, 3],
   });
 

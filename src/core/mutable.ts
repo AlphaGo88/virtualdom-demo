@@ -7,7 +7,7 @@ import {
   hasChanged,
 } from 'shared/utils';
 import { activeEffect, resumeTracking, stopTracking } from 'core/effect';
-import { ITERATE_KEY, track, trigger, TriggerTypes } from 'core/reactiveEffect';
+import { ITERATE_KEY, track, trigger, TriggerTypes } from 'core/mutableEffects';
 
 const RAW = Symbol();
 const proxyMap = new WeakMap<object, any>();
@@ -46,21 +46,29 @@ function createArrayInstrumentations() {
   return instrumentations;
 }
 
+function isNonTrackableKey(key: unknown) {
+  return isSymbol(key) || '__proto__' === key;
+}
+
+function toRaw(observed: any) {
+  return observed?.[RAW] ?? observed;
+}
+
 function hasOwnProperty(this: object, key: unknown) {
   const obj = toRaw(this);
 
-  if (!isNonReactiveKey(key)) {
+  if (!isNonTrackableKey(key)) {
     track(obj, String(key));
   }
   return obj.hasOwnProperty(key as PropertyKey);
 }
 
 // use this to create deep reactive objects.
-export function useStore<T extends object>(obj: T) {
+export function useMutable<T extends object>(obj: T) {
   return createStore(obj);
 }
 
-export function useShallowStore<T extends object>(obj: T) {
+export function useShallowMutable<T extends object>(obj: T) {
   return createStore(obj, false);
 }
 
@@ -102,7 +110,7 @@ function createStore<T extends object>(obj: T, deep = true) {
 
       const value = Reflect.get(target, key, receiver);
 
-      if (isNonReactiveKey(key)) {
+      if (isNonTrackableKey(key)) {
         return value;
       }
 
@@ -142,7 +150,7 @@ function createStore<T extends object>(obj: T, deep = true) {
     },
 
     has(target, key) {
-      if (!isNonReactiveKey(key)) {
+      if (!isNonTrackableKey(key)) {
         track(target, key);
       }
       return Reflect.has(target, key);
@@ -170,12 +178,4 @@ function createStore<T extends object>(obj: T, deep = true) {
 
   proxyMap.set(obj, proxy);
   return proxy;
-}
-
-function isNonReactiveKey(key: unknown) {
-  return isSymbol(key) || '__proto__' === key;
-}
-
-function toRaw<T>(observed: T): T {
-  return (observed && (observed as any)[RAW]) ?? observed;
 }
