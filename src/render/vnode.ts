@@ -82,6 +82,10 @@ export class VNode {
       unmountChildren(vnode, true);
     } else if (isJSXElement(element)) {
       // we don't remove the dom node here to avoid unnecessary 'removeChild'
+      const { ref } = element as JSXElement;
+      if (ref) {
+        ref.value = null;
+      }
       unmountChildren(vnode);
     }
   }
@@ -96,7 +100,7 @@ export class VNode {
 
     if (compInstance) {
       vnode.element = nextElement;
-      // this will trigger update effect if necessary.
+      // this will trigger render effect
       compInstance.receive((nextElement as JSXElement).props);
     } else if (isJSXPortal(element)) {
       updatePortal(vnode, nextElement as JSXPortal);
@@ -149,14 +153,14 @@ function mountComponent(vnode: VNode, element: JSXElement) {
   vnode.compInstance = compInstance;
 
   let renderedElement: JSXNode;
-  const updateEffect = new ReactiveEffect(() => {
+  const renderEffect = new ReactiveEffect(() => {
     renderedElement = compInstance.render();
     if (vnode.child) {
       updateComponent(vnode, renderedElement);
     }
   });
-  compInstance.addUnmountCallback(() => updateEffect.cleanup());
-  updateEffect.run();
+  compInstance.addUnmountCallback(() => renderEffect.dispose());
+  renderEffect.run();
 
   const childVNode = new VNode(renderedElement);
   vnode.child = childVNode;

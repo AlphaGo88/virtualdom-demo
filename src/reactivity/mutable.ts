@@ -46,8 +46,11 @@ function createArrayInstrumentations() {
   return instrumentations;
 }
 
-function isNonTrackableKey(key: unknown) {
-  return isSymbol(key) || '__proto__' === key;
+function isTrackable(target: object, key: unknown) {
+  return (
+    !isSymbol(key) &&
+    (hasOwn(target, key as PropertyKey) || !((key as PropertyKey) in target))
+  );
 }
 
 function toRaw(observed: any) {
@@ -55,27 +58,29 @@ function toRaw(observed: any) {
 }
 
 function hasOwnProperty(this: object, key: unknown) {
-  const obj = toRaw(this);
+  const raw = toRaw(this);
 
-  if (!isNonTrackableKey(key)) {
-    track(obj, String(key));
+  if (isTrackable(raw, key)) {
+    track(raw, String(key));
   }
-  return obj.hasOwnProperty(key as PropertyKey);
+  return raw.hasOwnProperty(key as PropertyKey);
 }
 
 // use this to create deep reactive objects.
 export function useMutable<T extends object>(obj: T) {
-  return createStore(obj);
+  return createMutable(obj);
 }
 
 export function useShallowMutable<T extends object>(obj: T) {
-  return createStore(obj, false);
+  return createMutable(obj, false);
 }
 
-function createStore<T extends object>(obj: T, deep = true) {
+function createMutable<T extends object>(obj: T, deep = true) {
   if (!isObject(obj)) {
     if (__DEV__) {
-      console.error(`Can not create store on target: ${obj}.`);
+      console.error(
+        `Unexpected type ${typeof obj} received when initializing 'useMutable' or 'useShallowMutable'. Expected an object.`
+      );
     }
     return obj;
   }
@@ -110,34 +115,25 @@ function createStore<T extends object>(obj: T, deep = true) {
 
       const value = Reflect.get(target, key, receiver);
 
-      if (isNonTrackableKey(key)) {
-        return value;
-      }
-
-      if (activeEffect) {
+      if (activeEffect && isTrackable(target, key)) {
         track(target, key);
       }
 
-      if (deep && isObject(value)) {
-        return createStore(value);
-      }
-
-      return value;
+      return deep && isObject(value) ? createMutable(value) : value;
     },
 
     set(target, key, value, receiver) {
       value = toRaw(value);
       const oldValue = toRaw(target[key as keyof T]);
-
-      if (isArray(target)) {
-        console.log('set', key, value, oldValue);
-      }
-
       const hadKey =
         isArray(target) && isIndexKey(key)
           ? Number(key) < target.length
           : hasOwn(target, key);
       const result = Reflect.set(target, key, value, receiver);
+
+      if (isArray(target)) {
+        console.log('set', key, oldValue, value);
+      }
 
       if (proxy === receiver) {
         if (!hadKey) {
@@ -150,20 +146,19 @@ function createStore<T extends object>(obj: T, deep = true) {
     },
 
     has(target, key) {
-      if (!isNonTrackableKey(key)) {
+      if (isTrackable(target, key)) {
         track(target, key);
       }
       return Reflect.has(target, key);
     },
 
     deleteProperty(target, key) {
-      if (isArray(target)) {
-        console.log('delete', key);
-      }
-
       const hadKey = hasOwn(target, key);
       const result = Reflect.deleteProperty(target, key);
 
+      if (isArray(target)) {
+        console.log('delete', key);
+      }
       if (result && hadKey) {
         trigger(target, TriggerTypes.DELETE, key, undefined);
       }

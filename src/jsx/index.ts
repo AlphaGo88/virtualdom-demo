@@ -26,7 +26,7 @@ function hasValidRef(config: Props) {
 export function createJSXElement(
   type: unknown,
   key: Key | null,
-  ref: Ref<Element> | null,
+  ref: Ref<any> | null,
   props: Props
 ): JSXElement {
   return {
@@ -40,7 +40,7 @@ export function createJSXElement(
 
 function _jsx(type: unknown, config: Props, maybeKey: unknown) {
   const key = maybeKey == null ? null : '' + maybeKey;
-  let ref: Ref<Element> | null = null;
+  let ref: Ref<any> | null = null;
   const props: Props = {};
 
   if (hasValidRef(config)) {

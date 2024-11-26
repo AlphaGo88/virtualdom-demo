@@ -25,11 +25,6 @@ function track(props: Props, key: string) {
 }
 
 export function wrapProps(props: Props) {
-  // if target is already a proxy, return it.
-  if ((props as any)[RAW]) {
-    return props;
-  }
-
   return new Proxy(props, {
     get(target, key, receiver) {
       if (key === RAW) {
@@ -42,16 +37,16 @@ export function wrapProps(props: Props) {
       return Reflect.get(target, key, receiver);
     },
 
-    defineProperty() {
+    set() {
       if (__DEV__) {
-        console.error('Props is not configurable.');
+        console.error('Props can not be mutated directly.');
       }
       return true;
     },
 
-    set() {
+    defineProperty() {
       if (__DEV__) {
-        console.error('Props can not be mutated directly.');
+        console.error('Props is not configurable.');
       }
       return true;
     },

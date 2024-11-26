@@ -29,7 +29,7 @@ export function isIndexKey(key: unknown) {
   );
 }
 
-export function hasOwn(val: object, key: string | symbol) {
+export function hasOwn(val: object, key: PropertyKey) {
   return Object.prototype.hasOwnProperty.call(val, key);
 }
 

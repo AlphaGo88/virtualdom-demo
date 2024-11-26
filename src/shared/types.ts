@@ -1,7 +1,7 @@
 export type Key = string;
 
 export interface Ref<T> {
-  value: T | null;
+  value: T;
 }
 
 export type Props = Record<string, any>;
@@ -17,7 +17,7 @@ export interface JSXElement {
   $$typeof: symbol;
   type: unknown;
   key: Key | null;
-  ref: Ref<Element> | null;
+  ref: Ref<any> | null;
   props: Props;
 }
 

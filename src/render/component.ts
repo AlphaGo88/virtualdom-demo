@@ -4,12 +4,12 @@ import { wrapProps, updateProps } from './props';
 
 type CommonJSXProps = {
   key?: string | number;
-  ref?: Ref<Element>;
+  ref?: Ref<any>;
 };
 
 export interface Component {
   $$typeof: symbol;
-  new (props: Props, ref: Ref<Element> | null): ComponentInstance;
+  new (props: Props, ref: Ref<any> | null): ComponentInstance;
 }
 
 export interface ComponentInstance {
@@ -28,8 +28,8 @@ class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
 
   props: Props = {};
-  mountCallbacks: (() => void)[] = [];
-  unmountCallbacks: (() => void)[] = [];
+  mountCallbacks: (() => void)[] | null = null;
+  unmountCallbacks: (() => void)[] | null = null;
 
   // will be rewritten after calling setup function
   render: () => JSXNode = () => null;
@@ -46,25 +46,37 @@ class BaseComponent implements ComponentInstance {
   }
 
   addMountCallback(fn: () => void) {
-    this.mountCallbacks.push(fn);
+    if (!this.mountCallbacks) {
+      this.mountCallbacks = [fn];
+    } else {
+      this.mountCallbacks.push(fn);
+    }
   }
 
   addUnmountCallback(fn: () => void) {
-    this.unmountCallbacks.push(fn);
+    if (!this.unmountCallbacks) {
+      this.unmountCallbacks = [fn];
+    } else {
+      this.unmountCallbacks.push(fn);
+    }
   }
 
   mount() {
     const callbacks = this.mountCallbacks;
 
-    this.mountCallbacks = [];
-    callbacks.forEach((cb) => cb());
+    if (callbacks) {
+      this.mountCallbacks = null;
+      callbacks.forEach((cb) => cb());
+    }
   }
 
   unmount() {
     const callbacks = this.unmountCallbacks;
 
-    this.unmountCallbacks = [];
-    callbacks.forEach((cb) => cb());
+    if (callbacks) {
+      this.unmountCallbacks = null;
+      callbacks.forEach((cb) => cb());
+    }
   }
 }
 
@@ -75,14 +87,13 @@ class BaseComponent implements ComponentInstance {
  * @returns component constructor
  */
 export function defineComponent<P extends Props>(
-  setup: (props: P, ref: Ref<Element> | null) => () => JSXNode
+  setup: (props: P, ref: Ref<any> | null) => () => JSXNode
 ) {
   return class extends BaseComponent {
     props: P;
 
-    constructor(props: CommonJSXProps & P, ref: Ref<Element> | null) {
+    constructor(props: CommonJSXProps & P, ref: Ref<any> | null) {
       super();
-
       // make props reactive
       this.props = wrapProps(props ?? {}) as P;
 

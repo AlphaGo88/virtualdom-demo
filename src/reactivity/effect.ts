@@ -1,11 +1,14 @@
+import { isFunction } from 'vdom/shared/utils';
 import { currentSetupInstance } from 'vdom/render/component';
 
-export interface EffectFunc {
+export interface EffectFunction {
   (): void | (() => void);
 }
 
 export interface Effect {
+  active: boolean;
   run: () => void;
+  dispose: () => void;
 }
 
 const asyncQueue: Effect[] = [];
@@ -14,10 +17,11 @@ export let activeEffect: Effect | undefined;
 export let shouldTrack = true;
 
 export class ReactiveEffect implements Effect {
-  private fn: EffectFunc;
-  private cleanupFn: (() => void) | null = null;
+  active: boolean = true;
+  private fn: EffectFunction;
+  private cleanup: (() => void) | null = null;
 
-  constructor(fn: EffectFunc) {
+  constructor(fn: EffectFunction) {
     this.fn = fn;
   }
 
@@ -28,16 +32,20 @@ export class ReactiveEffect implements Effect {
     try {
       shouldTrack = true;
       activeEffect = this;
-      this.cleanup();
-      this.cleanupFn = this.fn() ?? null;
+      this.cleanup?.();
+      const result = this.fn();
+      if (isFunction(result)) {
+        this.cleanup = result;
+      }
     } finally {
       activeEffect = lastEffect;
       shouldTrack = lastShouldTrack;
     }
   }
 
-  cleanup() {
-    this.cleanupFn?.();
+  dispose() {
+    this.cleanup?.();
+    this.active = false;
   }
 }
 
@@ -75,6 +83,6 @@ export function useEffect(fn: () => void | (() => void)) {
     const effect = new ReactiveEffect(fn);
 
     currentSetupInstance.addMountCallback(() => effect.run());
-    currentSetupInstance.addUnmountCallback(() => effect.cleanup());
+    currentSetupInstance.addUnmountCallback(() => effect.dispose());
   }
 }

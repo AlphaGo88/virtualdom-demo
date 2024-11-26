@@ -54,8 +54,19 @@ export function trigger(
   let effectsToRun: Effect[] = [];
   const addEffects = (key: string | symbol) => {
     const effects = effectMap.get(key);
+
     if (effects) {
-      effectsToRun.push(...effects);
+      effects.forEach((effect) => {
+        if (effect.active) {
+          effectsToRun.push(effect);
+        } else {
+          effects.delete(effect);
+        }
+      });
+
+      if (effects.size === 0) {
+        effectMap.delete(key);
+      }
     }
   };
 
@@ -64,11 +75,11 @@ export function trigger(
   if (key === 'length' && isArray(target)) {
     const newLength = Number(value);
 
-    effectMap.forEach((effects, key) => {
+    for (const key of effectMap.keys()) {
       if (Number(key) >= newLength) {
-        effectsToRun.push(...effects);
+        addEffects(key);
       }
-    });
+    }
   } else {
     switch (type) {
       case TriggerTypes.ADD:
