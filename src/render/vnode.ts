@@ -50,7 +50,7 @@ export class VNode {
     }
 
     if (isJSXPortal(element)) {
-      return mountPortal(vnode, element as JSXPortal);
+      return mountPortalVNode(vnode, element as JSXPortal);
     }
 
     if (isJSXElement(element)) {
@@ -58,14 +58,14 @@ export class VNode {
       const { type } = element;
 
       if (isComponentType(type)) {
-        return mountComponent(vnode, element);
+        return mountComponentVNode(vnode, element);
       }
 
-      return mountElement(vnode, element);
+      return mountElementVNode(vnode, element);
     }
 
     // now treat the element as a text string
-    return mountText(vnode, element);
+    return mountTextVNode(vnode, element);
   }
 
   unmount() {
@@ -103,23 +103,23 @@ export class VNode {
       // this will trigger render effect
       compInstance.receive((nextElement as JSXElement).props);
     } else if (isJSXPortal(element)) {
-      updatePortal(vnode, nextElement as JSXPortal);
+      updatePortalVNode(vnode, nextElement as JSXPortal);
     } else if (isJSXElement(element)) {
-      updateElement(vnode, nextElement as JSXElement);
+      updateElementVNode(vnode, nextElement as JSXElement);
     } else {
-      updateText(vnode, nextElement);
+      updateTextVNode(vnode, nextElement);
     }
   }
 }
 
-function mountPortal(vnode: VNode, element: JSXPortal) {
+function mountPortalVNode(vnode: VNode, element: JSXPortal) {
   const { children, container } = element;
 
   mountChildren(vnode, children, container);
   return null;
 }
 
-function mountElement(vnode: VNode, element: JSXElement) {
+function mountElementVNode(vnode: VNode, element: JSXElement) {
   const { type, ref, props } = element;
   let node: Element | DocumentFragment | null = null;
 
@@ -135,7 +135,7 @@ function mountElement(vnode: VNode, element: JSXElement) {
   } else {
     // unknown type
     if (__DEV__) {
-      console.error(`Unknown element type "${type}".`);
+      console.error('Unknown element type %s.', type);
     }
     vnode.element = null;
   }
@@ -147,7 +147,7 @@ function mountElement(vnode: VNode, element: JSXElement) {
   return node;
 }
 
-function mountComponent(vnode: VNode, element: JSXElement) {
+function mountComponentVNode(vnode: VNode, element: JSXElement) {
   const { type, ref, props } = element;
   const compInstance = new (type as Component)(props, ref);
   vnode.compInstance = compInstance;
@@ -158,7 +158,7 @@ function mountComponent(vnode: VNode, element: JSXElement) {
     if (vnode.child) {
       updateComponent(vnode, renderedElement);
     }
-  });
+  }, true);
   compInstance.addUnmountCallback(() => renderEffect.dispose());
   renderEffect.run();
 
@@ -173,7 +173,7 @@ function mountComponent(vnode: VNode, element: JSXElement) {
   return node;
 }
 
-function mountText(vnode: VNode, element: JSXNode) {
+function mountTextVNode(vnode: VNode, element: JSXNode) {
   const text = '' + element;
   vnode.element = text;
 
@@ -228,7 +228,7 @@ function unmountChildren(vnode: VNode, removeDOMNode: boolean = false) {
   }
 }
 
-function updatePortal(vnode: VNode, nextElement: JSXPortal) {
+function updatePortalVNode(vnode: VNode, nextElement: JSXPortal) {
   const { children, container } = vnode.element as JSXPortal;
   const { children: nextChildren, container: nextContainer } = nextElement;
 
@@ -242,7 +242,7 @@ function updatePortal(vnode: VNode, nextElement: JSXPortal) {
   }
 }
 
-function updateElement(vnode: VNode, nextElement: JSXElement) {
+function updateElementVNode(vnode: VNode, nextElement: JSXElement) {
   const { props } = vnode.element as JSXElement;
   const { props: nextProps } = nextElement;
   const node = vnode.getDOMNode() as Element | DocumentFragment;
@@ -327,7 +327,7 @@ function updateComponent(vnode: VNode, nextRenderedElement: JSXNode) {
   }
 }
 
-function updateText(vnode: VNode, nextElement: JSXNode) {
+function updateTextVNode(vnode: VNode, nextElement: JSXNode) {
   const nextText = '' + nextElement;
 
   if (vnode.element !== nextText) {

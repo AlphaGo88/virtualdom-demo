@@ -38,7 +38,7 @@ export function createJSXElement(
   };
 }
 
-function _jsx(type: unknown, config: Props, maybeKey: unknown) {
+function jsx(type: unknown, config: Props, maybeKey: unknown) {
   const key = maybeKey == null ? null : '' + maybeKey;
   let ref: Ref<any> | null = null;
   const props: Props = {};
@@ -57,6 +57,4 @@ function _jsx(type: unknown, config: Props, maybeKey: unknown) {
 }
 
 export * from './jsxIs';
-export const jsx = _jsx;
-export const jsxDEV = _jsx;
-export { JSX_FRAGMENT_TYPE as Fragment };
+export { jsx, jsx as jsxs, jsx as jsxDEV, JSX_FRAGMENT_TYPE as Fragment };

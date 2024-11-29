@@ -79,7 +79,9 @@ function createMutable<T extends object>(obj: T, deep = true) {
   if (!isObject(obj)) {
     if (__DEV__) {
       console.error(
-        `Unexpected type ${typeof obj} received when initializing 'useMutable' or 'useShallowMutable'. Expected an object.`
+        'Unexpected target %s received when initializing' +
+          ' "useMutable" or "useShallowMutable". Expected an object.',
+        obj
       );
     }
     return obj;

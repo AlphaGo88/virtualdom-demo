@@ -1,5 +1,6 @@
 import { COMPONENT_TYPE } from 'vdom/shared/symbols';
 import type { Ref, Props, JSXNode } from 'vdom/shared/types';
+import { isFunction } from 'vdom/shared/utils';
 import { wrapProps, updateProps } from './props';
 
 type CommonJSXProps = {
@@ -22,14 +23,18 @@ export interface ComponentInstance {
   receive: (props: Props) => void;
 }
 
+export interface SetupFunction<P> {
+  (props: P, ref: Ref<any> | null): () => JSXNode;
+}
+
 export let currentSetupInstance: ComponentInstance | null = null;
 
 class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
 
   props: Props = {};
-  mountCallbacks: (() => void)[] | null = null;
-  unmountCallbacks: (() => void)[] | null = null;
+  private mountCallbacks: (() => void)[] | null = null;
+  private unmountCallbacks: (() => void)[] | null = null;
 
   // will be rewritten after calling setup function
   render: () => JSXNode = () => null;
@@ -63,7 +68,6 @@ class BaseComponent implements ComponentInstance {
 
   mount() {
     const callbacks = this.mountCallbacks;
-
     if (callbacks) {
       this.mountCallbacks = null;
       callbacks.forEach((cb) => cb());
@@ -72,7 +76,6 @@ class BaseComponent implements ComponentInstance {
 
   unmount() {
     const callbacks = this.unmountCallbacks;
-
     if (callbacks) {
       this.unmountCallbacks = null;
       callbacks.forEach((cb) => cb());
@@ -86,9 +89,7 @@ class BaseComponent implements ComponentInstance {
  * @param setup - setup function must return a render function
  * @returns component constructor
  */
-export function defineComponent<P extends Props>(
-  setup: (props: P, ref: Ref<any> | null) => () => JSXNode
-) {
+export function defineComponent<P extends Props>(setup: SetupFunction<P>) {
   return class extends BaseComponent {
     props: P;
 
@@ -100,7 +101,17 @@ export function defineComponent<P extends Props>(
       currentSetupInstance = this;
       // props is reactive, users should not destructure it.
       // 'ref' can be used for ref forwarding.
-      this.render = setup(this.props, ref);
+      const result = (setup as Function)(this.props, ref);
+      if (!isFunction(result)) {
+        if (__DEV__) {
+          console.error(
+            'Unexpected return type %s of "setup". Expected a render function.',
+            result
+          );
+        }
+      } else {
+        this.render = result;
+      }
       currentSetupInstance = null;
     }
   };

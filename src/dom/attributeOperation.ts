@@ -1,4 +1,5 @@
 import { Props } from 'vdom/shared/types';
+import { hasChanged, isFunction } from 'vdom/shared/utils';
 import { type AttrInfo, AttrType, attributes } from './attributes';
 
 function shouldIgnoreAttr(attrInfo: AttrInfo | null) {
@@ -19,21 +20,19 @@ export function updateNodeAttrs(
     const oldVal = prevProps[propName];
     const newVal = nextProps[propName];
 
-    if (shouldIgnoreAttr(attrInfo) || Object.is(oldVal, newVal)) {
+    if (shouldIgnoreAttr(attrInfo) || !hasChanged(oldVal, newVal)) {
       continue;
     }
 
     if (isEventProp(propName)) {
       const eventName = propName.slice(2).toLowerCase();
 
-      if (typeof oldVal === 'function') {
+      if (isFunction(oldVal)) {
         node.removeEventListener(eventName, oldVal);
       }
-
-      if (typeof newVal === 'function') {
+      if (isFunction(newVal)) {
         node.addEventListener(eventName, newVal);
       }
-
       continue;
     }
 
@@ -44,7 +43,6 @@ export function updateNodeAttrs(
       } else {
         node.setAttribute(propName, newVal);
       }
-
       continue;
     }
 
@@ -56,7 +54,6 @@ export function updateNodeAttrs(
       } else {
         (node as any)[attrName] = newVal;
       }
-
       continue;
     }
 
@@ -66,7 +63,6 @@ export function updateNodeAttrs(
       } else {
         node.setAttribute(attrName, '');
       }
-
       continue;
     }
 
@@ -78,7 +74,6 @@ export function updateNodeAttrs(
       } else {
         node.setAttribute(attrName, newVal);
       }
-
       continue;
     }
 

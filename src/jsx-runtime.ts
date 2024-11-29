@@ -1,1 +1,1 @@
-export { Fragment, jsx } from 'vdom/jsx';
+export { Fragment, jsx, jsxs } from 'vdom/jsx';

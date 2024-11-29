@@ -1,28 +1,34 @@
 import { isFunction } from 'vdom/shared/utils';
 import { currentSetupInstance } from 'vdom/render/component';
+import { Dep } from './dep';
 
 export interface EffectFunction {
   (): void | (() => void);
 }
 
 export interface Effect {
-  active: boolean;
+  isRender: boolean;
+  deps: Dep[];
   run: () => void;
   dispose: () => void;
 }
 
-const asyncQueue: Effect[] = [];
+const renderQueue: Set<Effect> = new Set();
+const effectQueue: Set<Effect> = new Set();
+let scheduled = false;
 
 export let activeEffect: Effect | undefined;
 export let shouldTrack = true;
 
 export class ReactiveEffect implements Effect {
-  active: boolean = true;
+  isRender: boolean;
+  deps: Dep[] = [];
   private fn: EffectFunction;
   private cleanup: (() => void) | null = null;
 
-  constructor(fn: EffectFunction) {
+  constructor(fn: EffectFunction, isRender: boolean = false) {
     this.fn = fn;
+    this.isRender = isRender;
   }
 
   run() {
@@ -32,6 +38,9 @@ export class ReactiveEffect implements Effect {
     try {
       shouldTrack = true;
       activeEffect = this;
+      this.deps.forEach((dep) => {
+        dep.set(this, false);
+      });
       this.cleanup?.();
       const result = this.fn();
       if (isFunction(result)) {
@@ -45,7 +54,12 @@ export class ReactiveEffect implements Effect {
 
   dispose() {
     this.cleanup?.();
-    this.active = false;
+    this.deps.forEach((dep) => {
+      dep.delete(this);
+      if (dep.size === 0) {
+        dep.cleanup();
+      }
+    });
   }
 }
 
@@ -58,15 +72,29 @@ export function resumeTracking() {
 }
 
 export function enqueueEffect(effect: Effect) {
-  if (!asyncQueue.includes(effect)) {
-    asyncQueue.push(effect);
-
-    Promise.resolve().then(() => {
-      while (asyncQueue.length) {
-        asyncQueue.shift()!.run();
-      }
-    });
+  if (effect.isRender) {
+    renderQueue.add(effect);
+  } else {
+    effectQueue.add(effect);
   }
+
+  if (!scheduled) {
+    schedule();
+  }
+}
+
+function schedule() {
+  scheduled = true;
+
+  Promise.resolve().then(() => {
+    const effects = [...renderQueue, ...effectQueue];
+    scheduled = false;
+    renderQueue.clear();
+    effectQueue.clear();
+    effects.forEach((effect) => {
+      effect.run();
+    });
+  });
 }
 
 export function useEffect(fn: () => void | (() => void)) {
@@ -77,11 +105,10 @@ export function useEffect(fn: () => void | (() => void)) {
   } else {
     if (__DEV__ && activeEffect) {
       console.error(
-        '"useEffect" should not be called inside render function or "useEffect".'
+        '"useEffect" should not be called inside render function or nested.'
       );
     }
     const effect = new ReactiveEffect(fn);
-
     currentSetupInstance.addMountCallback(() => effect.run());
     currentSetupInstance.addUnmountCallback(() => effect.dispose());
   }

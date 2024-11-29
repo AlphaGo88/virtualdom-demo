@@ -5,9 +5,10 @@ import {
   shouldTrack,
   enqueueEffect,
 } from './effect';
+import { createDep, Dep } from './dep';
 
-type EffectMap = Map<string | symbol, Set<Effect>>;
-const targetMap = new WeakMap<object, EffectMap>();
+type DepMap = Map<string | symbol, Dep>;
+const targetMap = new WeakMap<object, DepMap>();
 
 export const ITERATE_KEY = Symbol();
 
@@ -24,17 +25,20 @@ export function track(target: object, key: string | symbol) {
       console.log('track', key);
     }
 
-    let effectMap = targetMap.get(target);
-    if (!effectMap) {
-      targetMap.set(target, (effectMap = new Map()));
+    let depMap = targetMap.get(target);
+    if (!depMap) {
+      targetMap.set(target, (depMap = new Map()));
     }
 
-    let effects = effectMap.get(key);
-    if (!effects) {
-      effectMap.set(key, (effects = new Set()));
+    let dep = depMap.get(key);
+    if (!dep) {
+      dep = createDep(() => {
+        depMap.delete(key);
+      });
+      depMap.set(key, dep);
     }
 
-    effects.add(activeEffect);
+    dep.set(activeEffect, true);
   }
 }
 
@@ -46,54 +50,34 @@ export function trigger(
 ) {
   console.log('trigger', key);
 
-  let effectMap = targetMap.get(target);
-  if (!effectMap) {
+  const depMap = targetMap.get(target);
+  if (!depMap) {
     return;
   }
 
-  let effectsToRun: Effect[] = [];
-  const addEffects = (key: string | symbol) => {
-    const effects = effectMap.get(key);
-
-    if (effects) {
-      effects.forEach((effect) => {
-        if (effect.active) {
-          effectsToRun.push(effect);
-        } else {
-          effects.delete(effect);
-        }
-      });
-
-      if (effects.size === 0) {
-        effectMap.delete(key);
-      }
-    }
-  };
-
-  addEffects(key);
-
+  const deps: (Dep | undefined)[] = [depMap.get(key)];
   if (key === 'length' && isArray(target)) {
     const newLength = Number(value);
 
-    for (const key of effectMap.keys()) {
+    for (const key of depMap.keys()) {
       if (Number(key) >= newLength) {
-        addEffects(key);
+        deps.push(depMap.get(key));
       }
     }
   } else {
     switch (type) {
       case TriggerTypes.ADD:
         if (!isArray(target)) {
-          addEffects(ITERATE_KEY);
+          deps.push(depMap.get(ITERATE_KEY));
         } else if (isIndexKey(key)) {
           // new index added to array -> length changes
-          addEffects('length');
+          deps.push(depMap.get('length'));
         }
         break;
 
       case TriggerTypes.DELETE:
         if (!isArray(target)) {
-          addEffects(ITERATE_KEY);
+          deps.push(depMap.get(ITERATE_KEY));
         }
         break;
 
@@ -102,5 +86,15 @@ export function trigger(
     }
   }
 
+  const effectsToRun = new Set<Effect>();
+  deps.forEach((dep) => {
+    if (dep) {
+      dep.forEach((used, effect) => {
+        if (used) {
+          effectsToRun.add(effect);
+        }
+      });
+    }
+  });
   effectsToRun.forEach(enqueueEffect);
 }

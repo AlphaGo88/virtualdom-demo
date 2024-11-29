@@ -1,26 +1,30 @@
 import { Props } from 'vdom/shared/types';
 import { isString, isPlainObject, hasChanged, hasOwn } from 'vdom/shared/utils';
 import { type Effect, activeEffect } from 'vdom/reactivity/effect';
+import { createDep, Dep } from 'vdom/reactivity/dep';
 import { currentSetupInstance } from './component';
 
 const RAW = Symbol();
 
-type EffectMap = Map<string, Set<Effect>>;
-const targetMap = new WeakMap<Props, EffectMap>();
+type DepMap = Map<string, Dep>;
+const targetMap = new WeakMap<Props, DepMap>();
 
 function track(props: Props, key: string) {
   if (activeEffect) {
-    let effectMap = targetMap.get(props);
-    if (!effectMap) {
-      targetMap.set(props, (effectMap = new Map()));
+    let depMap = targetMap.get(props);
+    if (!depMap) {
+      targetMap.set(props, (depMap = new Map()));
     }
 
-    let effects = effectMap.get(key);
-    if (!effects) {
-      effectMap.set(key, (effects = new Set()));
+    let dep = depMap.get(key);
+    if (!dep) {
+      dep = createDep(() => {
+        depMap.delete(key);
+      });
+      depMap.set(key, dep);
     }
 
-    effects.add(activeEffect);
+    dep.set(activeEffect, true);
   }
 }
 
@@ -30,7 +34,6 @@ export function wrapProps(props: Props) {
       if (key === RAW) {
         return target;
       }
-
       if (isString(key) && hasOwn(target, key)) {
         track(target, key);
       }
@@ -70,7 +73,7 @@ function internalWriteProps(props: Props, key: string, value: unknown) {
 }
 
 export function updateProps(props: Props, nextProps: Props) {
-  const effectMap = targetMap.get(toRaw(props));
+  const depMap = targetMap.get(toRaw(props));
   const effectsToRun = new Set<Effect>();
 
   Object.keys(nextProps).forEach((key) => {
@@ -79,17 +82,33 @@ export function updateProps(props: Props, nextProps: Props) {
 
     if (hasChanged(oldVal, newVal)) {
       internalWriteProps(props, key, newVal);
-      effectMap?.get(key)?.forEach((effect) => effectsToRun.add(effect));
+      depMap?.get(key)?.forEach((used, effect) => {
+        if (used) {
+          effectsToRun.add(effect);
+        }
+      });
     }
   });
 
-  // effects run immediately
+  // run effects
   effectsToRun.forEach((effect) => effect.run());
 }
 
-export function mergeProps<P extends Props>(target: P, ...source: P[]) {
-  if (__DEV__ && !currentSetupInstance) {
-    console.error('"mergeProps" should not be called outside setup function.');
+export function mergeProps<P extends Props>(
+  target: P,
+  ...source: Partial<P>[]
+) {
+  if (__DEV__) {
+    if (!currentSetupInstance) {
+      console.error(
+        '"mergeProps" should not be called outside setup function.'
+      );
+    }
+    if (activeEffect) {
+      console.error(
+        '"mergeProps" should not be called inside render function or "useEffect".'
+      );
+    }
   }
 
   for (const src of source) {
@@ -100,7 +119,10 @@ export function mergeProps<P extends Props>(target: P, ...source: P[]) {
         }
       });
     } else if (__DEV__) {
-      console.error(`${src} can not be merged into props.`);
+      console.error(
+        'Unexpected argument %s received when calling "mergeProps". Expected an object.',
+        src
+      );
     }
   }
 }
