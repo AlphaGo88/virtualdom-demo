@@ -38,13 +38,13 @@ export default defineComponent(
     }
 
     return () => {
-      const style = `display: ${props.visible ? 'block' : 'none'}`;
+      const style = { display: props.visible ? 'block' : 'none' };
       const canSubmit = !!todo.title && !!todo.desc;
 
       const addTodo = (
-        <div className='add-todo-mask' style={style}>
-          <div className='add-todo'>
-            <div className='add-todo-close' onClick={props.onClose}>
+        <div class='add-todo-mask' style={style}>
+          <div class='add-todo'>
+            <div class='add-todo-close' onClick={props.onClose}>
               x
             </div>
 
@@ -60,7 +60,7 @@ export default defineComponent(
                   checked={todo.priority === 'urgent'}
                   onChange={onPriorityChange}
                 />
-                <label htmlFor='urgent'>urgent</label>
+                <label for='urgent'>urgent</label>
                 <input
                   type='radio'
                   id='normal'
@@ -69,7 +69,7 @@ export default defineComponent(
                   checked={todo.priority === 'normal'}
                   onChange={onPriorityChange}
                 />
-                <label htmlFor='normal'>normal</label>
+                <label for='normal'>normal</label>
               </div>
               <br />
 

@@ -1,23 +1,24 @@
-import { createRoot } from 'vdom/render/root';
-import { createPortal } from 'vdom/render/portal';
-import { defineComponent } from 'vdom/render/component';
-import { mergeProps } from 'vdom/render/props';
-import { onMount, onUnmount } from 'vdom/render/lifecycle';
-import { useRef } from 'vdom/render/ref';
-import { useState } from 'vdom/reactivity/state';
-import { useMutable, useShallowMutable } from 'vdom/reactivity/mutable';
-import { useEffect } from 'vdom/reactivity/effect';
+export * from 'vdom/dom/jsx';
 
-export {
-  createRoot,
-  createPortal,
-  defineComponent,
-  mergeProps,
-  onMount,
-  onUnmount,
-  useRef,
-  useState,
-  useMutable,
-  useShallowMutable,
-  useEffect,
-};
+export type {
+  Key,
+  Ref,
+  Props,
+  JSXPortal,
+  JSXElement,
+  JSXNode,
+  JSXChildren,
+} from 'vdom/shared/types';
+export type { Root } from 'vdom/render/root';
+export type { SetupFunction } from 'vdom/render/component';
+export type { StateGetter, StateSetter } from 'vdom/reactivity/state';
+
+export { createRoot } from 'vdom/render/root';
+export { createPortal } from 'vdom/render/portal';
+export { defineComponent } from 'vdom/render/component';
+export { mergeProps } from 'vdom/render/componentProps';
+export { onMount, onUnmount } from 'vdom/render/lifecycle';
+export { useRef } from 'vdom/render/ref';
+export { useState } from 'vdom/reactivity/state';
+export { useMutable, useShallowMutable } from 'vdom/reactivity/mutable';
+export { useEffect } from 'vdom/reactivity/effect';

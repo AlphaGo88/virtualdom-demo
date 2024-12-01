@@ -6,6 +6,8 @@ import type {
   DOMNode,
 } from 'vdom/shared/types';
 import { hasOwn, isArray, isString } from 'vdom/shared/utils';
+import { setProps } from 'vdom/dom/setProps';
+import { ReactiveEffect } from 'vdom/reactivity/effect';
 import {
   isJSXEmpty,
   isJSXPortal,
@@ -13,9 +15,7 @@ import {
   isComponentType,
   isFragmentType,
   isSameJSXType,
-} from 'vdom/jsx';
-import { updateNodeAttrs } from 'vdom/dom/attributeOperation';
-import { ReactiveEffect } from 'vdom/reactivity/effect';
+} from './jsxIs';
 import type { Component, ComponentInstance } from './component';
 
 export class VNode {
@@ -131,7 +131,7 @@ function mountElementVNode(vnode: VNode, element: JSXElement) {
     if (ref) {
       ref.value = node;
     }
-    updateNodeAttrs(node, {}, props);
+    setProps(node, props);
   } else {
     // unknown type
     if (__DEV__) {
@@ -250,7 +250,7 @@ function updateElementVNode(vnode: VNode, nextElement: JSXElement) {
   vnode.element = nextElement;
 
   if (node.nodeType === Node.ELEMENT_NODE) {
-    updateNodeAttrs(node as Element, props, nextProps);
+    setProps(node as Element, nextProps, props);
   }
 
   if (hasOwn(props, 'children')) {

@@ -1,4 +1,4 @@
-export type Key = string;
+export type Key = number | string;
 
 export interface Ref<T> {
   value: T;

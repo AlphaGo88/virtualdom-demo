@@ -45,6 +45,8 @@ export class ReactiveEffect implements Effect {
       const result = this.fn();
       if (isFunction(result)) {
         this.cleanup = result;
+      } else {
+        this.cleanup = null;
       }
     } finally {
       activeEffect = lastEffect;

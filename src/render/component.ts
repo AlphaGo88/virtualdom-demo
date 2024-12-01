@@ -1,12 +1,7 @@
 import { COMPONENT_TYPE } from 'vdom/shared/symbols';
 import type { Ref, Props, JSXNode } from 'vdom/shared/types';
 import { isFunction } from 'vdom/shared/utils';
-import { wrapProps, updateProps } from './props';
-
-type CommonJSXProps = {
-  key?: string | number;
-  ref?: Ref<any>;
-};
+import { wrapProps, updateProps } from './componentProps';
 
 export interface Component {
   $$typeof: symbol;
@@ -93,7 +88,7 @@ export function defineComponent<P extends Props>(setup: SetupFunction<P>) {
   return class extends BaseComponent {
     props: P;
 
-    constructor(props: CommonJSXProps & P, ref: Ref<any> | null) {
+    constructor(props: P, ref: Ref<any> | null) {
       super();
       // make props reactive
       this.props = wrapProps(props ?? {}) as P;

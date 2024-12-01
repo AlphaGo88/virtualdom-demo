@@ -2,20 +2,26 @@ import { hasChanged } from 'vdom/shared/utils';
 import { activeEffect, enqueueEffect } from './effect';
 import { createDep, Dep } from './dep';
 
-export interface State<T> {
+interface State<T> {
   value: T;
   dep: Dep | null;
 }
 
-export function useState<T>(
-  initialValue: T
-): [getter: () => T, setter: (value: T | ((prev: T) => T)) => T] {
+export interface StateGetter<T> {
+  (): T;
+}
+
+export interface StateSetter<T> {
+  (value: T | ((prev: T) => T)): T;
+}
+
+export function useState<T>(initialValue: T): [StateGetter<T>, StateSetter<T>] {
   const state: State<T> = {
     value: initialValue,
     dep: null,
   };
 
-  const getter = () => {
+  const getter: StateGetter<T> = () => {
     // collect dependency
     if (activeEffect) {
       if (!state.dep) {
@@ -29,7 +35,7 @@ export function useState<T>(
     return state.value;
   };
 
-  const setter = (value: T | ((prev: T) => T)) => {
+  const setter: StateSetter<T> = (value) => {
     const newVal: T =
       typeof value === 'function'
         ? (value as (prev: T) => T)(state.value)

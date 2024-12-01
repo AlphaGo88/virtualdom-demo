@@ -48,16 +48,16 @@ export default defineComponent(() => {
   }
 
   return () => (
-    <div className='todo-app'>
+    <div class='todo-app'>
       <h2>🌈 Todo App 🌈</h2>
       <button onClick={onAddClick}>Add Todo</button>
       <br />
       <ul>
         {store.todoList.map((todo, i) => (
-          <li className='todo-li'>
+          <li class='todo-li'>
             <h3>
               {todo.title}
-              <span className='remove-btn' onClick={() => onRemoveTodo(i)}>
+              <span class='remove-btn' onClick={() => onRemoveTodo(i)}>
                 ❌
               </span>
             </h3>
