@@ -1,6 +1,5 @@
 import { COMPONENT_TYPE } from 'vdom/shared/symbols';
 import type { Ref, Props, JSXNode } from 'vdom/shared/types';
-import { isFunction } from 'vdom/shared/utils';
 import { wrapProps, updateProps } from './componentProps';
 
 export interface Component {
@@ -28,18 +27,11 @@ class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
 
   props: Props = {};
-  private mountCallbacks: (() => void)[] | null = null;
-  private unmountCallbacks: (() => void)[] | null = null;
+  protected mountCallbacks: (() => void)[] | null = null;
+  protected unmountCallbacks: (() => void)[] | null = null;
 
   // will be rewritten after calling setup function
   render: () => JSXNode = () => null;
-
-  // constructor() {
-  //   this.renderEffect = new ReactiveEffect(() => {
-  //     this.renderedElement = this.renderToJSXNode();
-  //     this.vnode?.updateComponent(this.renderedElement);
-  //   });
-  // }
 
   receive(nextProps: Props) {
     updateProps(this.props, nextProps);
@@ -96,17 +88,7 @@ export function defineComponent<P extends Props>(setup: SetupFunction<P>) {
       currentSetupInstance = this;
       // props is reactive, users should not destructure it.
       // 'ref' can be used for ref forwarding.
-      const result = (setup as Function)(this.props, ref);
-      if (!isFunction(result)) {
-        if (__DEV__) {
-          console.error(
-            'Unexpected return type %s of "setup". Expected a render function.',
-            result
-          );
-        }
-      } else {
-        this.render = result;
-      }
+      this.render = setup(this.props, ref);
       currentSetupInstance = null;
     }
   };

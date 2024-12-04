@@ -31,5 +31,3 @@ export type JSXNode =
   | undefined;
 
 export type JSXChildren = JSXNode | JSXNode[];
-
-export type DOMNode = Element | Text | DocumentFragment;

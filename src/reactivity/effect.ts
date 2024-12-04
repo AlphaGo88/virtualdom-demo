@@ -9,7 +9,7 @@ export interface EffectFunction {
 export interface Effect {
   isRender: boolean;
   deps: Dep[];
-  run: () => void;
+  run: Function;
   dispose: () => void;
 }
 
@@ -20,49 +20,8 @@ let scheduled = false;
 export let activeEffect: Effect | undefined;
 export let shouldTrack = true;
 
-export class ReactiveEffect implements Effect {
-  isRender: boolean;
-  deps: Dep[] = [];
-  private fn: EffectFunction;
-  private cleanup: (() => void) | null = null;
-
-  constructor(fn: EffectFunction, isRender: boolean = false) {
-    this.fn = fn;
-    this.isRender = isRender;
-  }
-
-  run() {
-    let lastShouldTrack = shouldTrack;
-    let lastEffect = activeEffect;
-
-    try {
-      shouldTrack = true;
-      activeEffect = this;
-      this.deps.forEach((dep) => {
-        dep.set(this, false);
-      });
-      this.cleanup?.();
-      const result = this.fn();
-      if (isFunction(result)) {
-        this.cleanup = result;
-      } else {
-        this.cleanup = null;
-      }
-    } finally {
-      activeEffect = lastEffect;
-      shouldTrack = lastShouldTrack;
-    }
-  }
-
-  dispose() {
-    this.cleanup?.();
-    this.deps.forEach((dep) => {
-      dep.delete(this);
-      if (dep.size === 0) {
-        dep.cleanup();
-      }
-    });
-  }
+export function setActiveEffect(effect?: Effect) {
+  activeEffect = effect;
 }
 
 export function stopTracking() {
@@ -71,6 +30,46 @@ export function stopTracking() {
 
 export function resumeTracking() {
   shouldTrack = true;
+}
+
+export class ReactiveEffect implements Effect {
+  isRender: boolean = false;
+  deps: Dep[] = [];
+  fn: EffectFunction;
+  cleanup?: () => void;
+
+  constructor(fn: EffectFunction) {
+    this.fn = fn;
+  }
+
+  run() {
+    let lastEffect = activeEffect;
+
+    try {
+      activeEffect = this;
+      this.deps.forEach((dep) => {
+        dep.set(this, false);
+      });
+      this.cleanup?.();
+      const result = this.fn();
+      this.cleanup = isFunction(result) ? result : undefined;
+    } finally {
+      activeEffect = lastEffect;
+    }
+  }
+
+  dispose() {
+    if (this.cleanup) {
+      this.cleanup();
+      this.cleanup = undefined;
+    }
+    this.deps.forEach((dep) => {
+      dep.delete(this);
+      if (dep.size === 0) {
+        dep.cleanup();
+      }
+    });
+  }
 }
 
 export function enqueueEffect(effect: Effect) {
@@ -87,7 +86,6 @@ export function enqueueEffect(effect: Effect) {
 
 function schedule() {
   scheduled = true;
-
   Promise.resolve().then(() => {
     const effects = [...renderQueue, ...effectQueue];
     scheduled = false;

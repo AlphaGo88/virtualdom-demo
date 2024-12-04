@@ -1,16 +1,21 @@
 import type { JSXNode } from 'vdom/shared/types';
 import { isValidContainer } from 'vdom/dom/domContainer';
-import { createJSXElement } from 'vdom/render/jsxElement';
-import { VNode } from './vnode';
+import { createJSXElement } from './jsxElement';
+import {
+  type VNode,
+  createVNode,
+  mountVNode,
+  unmountVNode,
+  updateVNode,
+} from './vnode';
 
 export interface Root {
-  containerEl: Element;
   render: (element: JSXNode) => void;
   unmount: () => void;
 }
 
 class VDOMRoot implements Root {
-  containerEl: Element;
+  private containerEl: Element;
   private rootVNode: VNode | null = null;
 
   constructor(container: Element) {
@@ -19,31 +24,30 @@ class VDOMRoot implements Root {
 
   render(element: JSXNode) {
     let { containerEl, rootVNode } = this;
+
     if (!rootVNode) {
       const rootElement = createJSXElement('_vdom_root', null, null, {});
-      rootVNode = new VNode(rootElement);
+
+      rootVNode = createVNode(rootElement);
       rootVNode.node = containerEl;
       this.rootVNode = rootVNode;
     }
 
     if (rootVNode.child) {
-      rootVNode.child.update(element);
+      updateVNode(rootVNode.child, element);
     } else {
-      const vnode = new VNode(element);
+      const vnode = createVNode(element);
+
       rootVNode.child = vnode;
       vnode.parent = rootVNode;
-
-      const node = vnode.mount();
       containerEl.innerHTML = '';
-      if (node) {
-        containerEl.appendChild(node);
-      }
+      mountVNode(vnode, containerEl);
     }
   }
 
   unmount() {
     if (this.rootVNode) {
-      this.rootVNode.unmount();
+      unmountVNode(this.rootVNode, false);
       this.containerEl.innerHTML = '';
       this.rootVNode = null;
     }

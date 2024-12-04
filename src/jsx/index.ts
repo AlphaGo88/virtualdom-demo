@@ -1,7 +1,7 @@
-import { createJSXElement } from 'vdom/render/jsxElement';
 import { JSX_FRAGMENT_TYPE } from 'vdom/shared/symbols';
 import type { Key, Ref, Props } from 'vdom/shared/types';
 import { hasOwn, isPlainObject } from 'vdom/shared/utils';
+import { createJSXElement } from 'vdom/render/jsxElement';
 
 const RESERVED_PROPS = {
   key: true,
