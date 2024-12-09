@@ -4,7 +4,7 @@ import AddTodo from './AddTodo';
 import './styles.css';
 
 export default defineComponent(() => {
-  const store = useMutable<{
+  const state = useMutable<{
     todoList: Todo[];
     addTodoVisible: boolean;
     editIndex: number;
@@ -15,36 +15,36 @@ export default defineComponent(() => {
   });
 
   useEffect(() => {
-    console.log(store.addTodoVisible);
+    console.log(state.addTodoVisible);
   });
 
   function onAddClick() {
-    store.addTodoVisible = true;
+    state.addTodoVisible = true;
   }
 
   function onSubmitNewTodo(todo: Todo) {
-    store.addTodoVisible = false;
-    store.todoList.push(todo);
+    state.addTodoVisible = false;
+    state.todoList.push(todo);
   }
 
   function onCloseAddTodo() {
-    store.addTodoVisible = false;
+    state.addTodoVisible = false;
   }
 
   function onRemoveTodo(index: number) {
-    store.todoList.splice(index, 1);
+    state.todoList.splice(index, 1);
   }
 
   function onDescClick(index: number) {
-    store.editIndex = index;
+    state.editIndex = index;
   }
 
   function onDescInput(event: Event, index: number) {
-    store.todoList[index].desc = (event.target as HTMLTextAreaElement).value;
+    state.todoList[index].desc = (event.target as HTMLTextAreaElement).value;
   }
 
   function onDescBlur() {
-    store.editIndex = -1;
+    state.editIndex = -1;
   }
 
   return () => (
@@ -53,7 +53,7 @@ export default defineComponent(() => {
       <button onClick={onAddClick}>Add Todo</button>
       <br />
       <ul>
-        {store.todoList.map((todo, i) => (
+        {state.todoList.map((todo, i) => (
           <li class='todo-li'>
             <h3>
               {todo.title}
@@ -61,7 +61,7 @@ export default defineComponent(() => {
                 ❌
               </span>
             </h3>
-            {i === store.editIndex ? (
+            {i === state.editIndex ? (
               <textarea
                 value={todo.desc}
                 onInput={(e: Event) => onDescInput(e, i)}
@@ -74,7 +74,7 @@ export default defineComponent(() => {
         ))}
       </ul>
       <AddTodo
-        visible={store.addTodoVisible}
+        visible={state.addTodoVisible}
         onSubmit={onSubmitNewTodo}
         onClose={onCloseAddTodo}
       />

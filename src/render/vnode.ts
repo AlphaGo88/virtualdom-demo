@@ -4,7 +4,7 @@ import type {
   JSXElement,
   JSXChildren,
 } from 'vdom/shared/types';
-import { hasOwn, isArray, isString } from 'vdom/shared/utils';
+import { hasOwn, isArray } from 'vdom/shared/utils';
 import { setProps } from 'vdom/dom/setProps';
 import {
   createElement,
@@ -75,32 +75,26 @@ export function mountVNode(
 }
 
 export function unmountVNode(vnode: VNode, needRemove: boolean) {
-  const { element, componentInstance } = vnode;
-  let needRemoveChildNodes: boolean;
+  const { element, componentInstance, node, child } = vnode;
 
   if (componentInstance) {
     componentInstance.unmount();
-    needRemoveChildNodes = needRemove;
   } else if (isJSXPortal(element)) {
     // dom nodes mounted to the portal container should be removed immediately.
-    needRemoveChildNodes = true;
+    needRemove = true;
   } else if (isJSXElement(element)) {
     const { ref } = element as JSXElement;
     if (ref) {
       ref.value = null;
     }
-    needRemoveChildNodes = needRemove && !vnode.node;
-  } else {
-    // text vnode or empty vnode
-    needRemoveChildNodes = false;
   }
 
-  if (vnode.node) {
-    needRemove && removeNode(vnode.node);
-    vnode.node = null;
+  if (child) {
+    unmountChildren(vnode, needRemove && !node);
   }
-  if (vnode.child) {
-    unmountChildren(vnode, needRemoveChildNodes);
+  if (node) {
+    needRemove && removeNode(node);
+    vnode.node = null;
   }
 }
 
@@ -131,13 +125,12 @@ function mountElementVNode(
   anchor: Node | null = null
 ) {
   const { type, ref, props } = vnode.element as JSXElement;
-
   if (isFragmentType(type)) {
     // for <>...</> or <Fragment>...</Fragment>
     if (hasOwn(props, 'children')) {
       mountChildren(vnode, props.children, parent, anchor);
     }
-  } else if (isString(type)) {
+  } else {
     const node = createElement(type);
     vnode.node = node;
     if (ref) {
@@ -148,12 +141,6 @@ function mountElementVNode(
       mountChildren(vnode, props.children, node);
     }
     insertNode(node, parent, anchor);
-  } else {
-    // unknown type
-    if (__DEV__) {
-      console.error('Unknown element type %s.', type);
-    }
-    vnode.element = null;
   }
 }
 
@@ -194,13 +181,12 @@ export function mountChildren(
   parentNode: Element,
   anchor: Node | null = null
 ) {
-  let cur: VNode;
-  let pre: VNode | null = null;
-
   if (!isArray(children)) {
     children = [children];
   }
 
+  let cur: VNode;
+  let pre: VNode | null = null;
   children.forEach((child) => {
     cur = createVNode(child);
     cur.parent = vnode;
@@ -220,10 +206,11 @@ function unmountChildren(vnode: VNode, needRemove: boolean) {
     unmountVNode(cur, needRemove);
     cur = cur.nextSibling;
   }
+  vnode.child = null;
 }
 
 function updatePortalVNode(vnode: VNode, nextElement: JSXPortal) {
-  const { children, container } = vnode.element as JSXPortal;
+  const { container } = vnode.element as JSXPortal;
   const { children: nextChildren, container: nextContainer } = nextElement;
 
   if (container !== nextContainer) {
@@ -232,7 +219,7 @@ function updatePortalVNode(vnode: VNode, nextElement: JSXPortal) {
     vnode.element = nextElement;
     mountPortalVNode(vnode);
   } else {
-    updateChildren(vnode, children, nextChildren, container);
+    updateChildren(vnode, nextChildren, container);
   }
 }
 
@@ -248,12 +235,17 @@ function updateElementVNode(vnode: VNode, nextElement: JSXElement) {
 
   if (hasOwn(props, 'children')) {
     if (hasOwn(nextProps, 'children')) {
-      updateChildren(vnode, props.children, nextProps.children);
+      updateChildren(vnode, nextProps.children);
     } else {
       unmountChildren(vnode, true);
     }
   } else if (hasOwn(nextProps, 'children')) {
-    mountChildren(vnode, nextProps.children, findParentDOMNode(vnode));
+    mountChildren(
+      vnode,
+      nextProps.children,
+      findHolderDOMNode(vnode),
+      node ? null : findNextSiblingDOMNode(vnode)
+    );
   }
 }
 
@@ -266,79 +258,187 @@ function updateTextVNode(vnode: VNode, nextElement: JSXNode) {
 }
 
 export function updateChildren(
-  vnode: VNode,
-  children: JSXChildren,
+  parentVNode: VNode,
   nextChildren: JSXChildren,
   parentNode?: Element
 ) {
-  if (!parentNode) {
-    parentNode = findParentDOMNode(vnode);
-  }
-
-  if (!isArray(children)) {
-    children = [children];
-  }
   if (!isArray(nextChildren)) {
     nextChildren = [nextChildren];
   }
+  if (!parentNode) {
+    parentNode = findHolderDOMNode(parentVNode);
+  }
+  const tailAnchor =
+    parentVNode.node || isJSXPortal(parentVNode.element)
+      ? null
+      : findNextSiblingDOMNode(parentVNode);
 
-  let cur: VNode | null = vnode.child;
-  let pre: VNode | null = null;
-  let i = 0;
-
+  const tempArr: VNode[] = [];
+  let cur = parentVNode.child;
   while (cur) {
-    const child = children[i];
-    const nextChild = nextChildren[i];
-
-    if (i >= nextChildren.length) {
-      // remove child if necessary
-      if (i === nextChildren.length) {
-        if (pre) {
-          pre.nextSibling = null;
-        } else {
-          vnode.child = null;
-        }
-      }
-      unmountVNode(cur, true);
-    } else if (isSameJSXType(child, nextChild)) {
-      updateVNode(cur, nextChild);
-    } else {
-      // now we need to replace
-      const next = createVNode(nextChild);
-      const nextSiblingDOMNode = findNextSiblingDOMNode(cur);
-      next.parent = vnode;
-      next.nextSibling = cur.nextSibling;
-      if (pre) {
-        pre.nextSibling = next;
-      } else {
-        vnode.child = next;
-      }
-      unmountVNode(cur, true);
-      mountVNode(next, parentNode, nextSiblingDOMNode);
-      cur = next;
-    }
-
-    pre = cur;
+    tempArr.push(cur);
     cur = cur.nextSibling;
-    i++;
   }
 
-  // append new nodes
-  while (i < nextChildren.length) {
-    const next = createVNode(nextChildren[i]);
-    next.parent = vnode;
-    if (pre) {
-      pre.nextSibling = next;
+  let start = 0;
+  let end = tempArr.length - 1;
+  let nextStart = 0;
+  let nextEnd = nextChildren.length - 1;
+
+  while (start <= end && nextStart <= nextEnd) {
+    if (isSameVNode(tempArr[start].element, nextChildren[nextStart])) {
+      updateVNode(tempArr[start], nextChildren[nextStart]);
+      start++;
+      nextStart++;
+    } else if (isSameVNode(tempArr[end].element, nextChildren[nextEnd])) {
+      updateVNode(tempArr[end], nextChildren[nextEnd]);
+      end--;
+      nextEnd--;
+    } else if (isSameVNode(tempArr[start].element, nextChildren[nextEnd])) {
+      updateVNode(tempArr[start], nextChildren[nextEnd]);
+      moveVNode(parentVNode, tempArr, start, end, parentNode, tailAnchor);
+      end--;
+      nextEnd--;
+    } else if (isSameVNode(tempArr[end].element, nextChildren[nextStart])) {
+      updateVNode(tempArr[end], nextChildren[nextStart]);
+      moveVNode(parentVNode, tempArr, end, start, parentNode, tailAnchor);
+      start++;
+      nextStart++;
     } else {
-      vnode.child = next;
+      let matchedIndex = -1;
+      for (let i = start + 1; i < end; i++) {
+        if (isSameVNode(nextChildren[nextStart], tempArr[i].element)) {
+          matchedIndex = i;
+          break;
+        }
+      }
+
+      if (matchedIndex !== -1) {
+        updateVNode(tempArr[matchedIndex], nextChildren[nextStart]);
+        moveVNode(
+          parentVNode,
+          tempArr,
+          matchedIndex,
+          start,
+          parentNode,
+          tailAnchor
+        );
+      } else {
+        insertVNode(
+          parentVNode,
+          tempArr,
+          start,
+          createVNode(nextChildren[nextStart]),
+          parentNode,
+          tailAnchor
+        );
+        end++;
+      }
+
+      start++;
+      nextStart++;
     }
-    mountVNode(next, parentNode);
-    pre = next;
-    i++;
+  }
+
+  if (start > end) {
+    // now vnodes from `nextStart` to `nextEnd` should be added
+    for (let i = nextStart; i <= nextEnd; i++) {
+      insertVNode(
+        parentVNode,
+        tempArr,
+        i,
+        createVNode(nextChildren[i]),
+        parentNode,
+        tailAnchor
+      );
+    }
+  } else if (nextStart > nextEnd && start <= end) {
+    // now vnodes from `start` to `end` should be removed
+    if (start === 0) {
+      parentVNode.child = tempArr[end].nextSibling;
+    } else {
+      tempArr[start - 1].nextSibling = tempArr[end].nextSibling;
+    }
+
+    for (let i = start; i <= end; i++) {
+      unmountVNode(tempArr[i], true);
+    }
   }
 }
 
-function findParentDOMNode(vnode: VNode): Element {
+function isSameVNode(prev: any, next: any) {
+  return prev.key === next.key && isSameJSXType(prev, next);
+}
+
+function insertVNode(
+  parentVNode: VNode,
+  tempArr: VNode[],
+  index: number,
+  vnode: VNode,
+  parentNode: Element,
+  tailAnchor: Node | null
+) {
+  tempArr.splice(index, 0, vnode);
+  if (index === 0) {
+    parentVNode.child = vnode;
+  } else {
+    tempArr[index - 1].nextSibling = vnode;
+  }
+  vnode.nextSibling = tempArr[index + 1];
+  mountVNode(
+    vnode,
+    parentNode,
+    vnode.nextSibling ? findNextSiblingDOMNode(vnode) : tailAnchor
+  );
+}
+
+function moveVNode(
+  parentVNode: VNode,
+  tempArr: VNode[],
+  from: number,
+  to: number,
+  parentNode: Element,
+  tailAnchor: Node | null
+) {
+  const vnode = tempArr[from];
+  tempArr.splice(from, 1);
+  if (from === 0) {
+    parentVNode.child = vnode.nextSibling;
+  } else {
+    tempArr[from - 1].nextSibling = vnode.nextSibling;
+  }
+
+  tempArr.splice(to, 0, vnode);
+  if (to === 0) {
+    parentVNode.child = vnode;
+  } else {
+    tempArr[to - 1].nextSibling = vnode;
+  }
+  vnode.nextSibling = tempArr[to + 1];
+  moveDOMNodeForVNode(
+    vnode,
+    parentNode,
+    vnode.nextSibling ? findNextSiblingDOMNode(vnode) : tailAnchor
+  );
+}
+
+function moveDOMNodeForVNode(
+  vnode: VNode,
+  parentNode: Element,
+  anchor: Node | null
+) {
+  if (vnode.node) {
+    insertNode(vnode.node, parentNode, anchor);
+  } else {
+    let child = vnode.child;
+    while (child) {
+      moveDOMNodeForVNode(child, parentNode, anchor);
+      child = child.nextSibling;
+    }
+  }
+}
+
+function findHolderDOMNode(vnode: VNode): Element {
   while (vnode.parent) {
     const { element, node } = vnode;
     if (node) {
@@ -349,14 +449,11 @@ function findParentDOMNode(vnode: VNode): Element {
     }
     vnode = vnode.parent;
   }
-  // root vnode should have an element node
+  // root vnode should have element node
   return vnode.node! as Element;
 }
 
-function findNextSiblingDOMNode(vnode: VNode): Node | null {
-  if (vnode.node) {
-    return vnode.node.nextSibling;
-  }
+function findNextSiblingDOMNode(vnode: VNode) {
   let sibling = vnode.nextSibling;
   while (sibling) {
     const node = findDOMNode(sibling);
@@ -365,7 +462,12 @@ function findNextSiblingDOMNode(vnode: VNode): Node | null {
     }
     sibling = sibling.nextSibling;
   }
-  return null;
+
+  let parent = vnode.parent;
+  if (!parent || parent.node) {
+    return null;
+  }
+  return findNextSiblingDOMNode(parent);
 }
 
 function findDOMNode(vnode: VNode): Node | null {
@@ -375,6 +477,7 @@ function findDOMNode(vnode: VNode): Node | null {
   if (isJSXPortal(vnode.element)) {
     return null;
   }
+
   let child = vnode.child;
   while (child) {
     const node = findDOMNode(child);
@@ -385,107 +488,3 @@ function findDOMNode(vnode: VNode): Node | null {
   }
   return null;
 }
-
-// function updateChildren(
-//   vnode: VNode,
-//   children: JSXChildren,
-//   nextChildren: JSXChildren,
-//   node: Element
-// ) {
-//   if (!isArray(children)) {
-//     children = [children];
-//   }
-//   if (!isArray(nextChildren)) {
-//     nextChildren = [nextChildren];
-//   }
-
-//   let cur: VNode | null = vnode.child;
-//   let pre: VNode | null = null;
-//   let i = 0;
-//   let currentNodeIndex = 0;
-
-//   while (cur) {
-//     const child = children[i];
-//     const nextChild = nextChildren[i];
-//     const childNode = cur.getDOMNode();
-
-//     if (i >= nextChildren.length) {
-//       // remove child if necessary
-//       cur.unmount();
-
-//       if (i === nextChildren.length) {
-//         if (pre) {
-//           pre.nextSibling = null;
-//         } else {
-//           vnode.child = null;
-//         }
-//       }
-
-//       if (childNode) {
-//         node.removeChild(childNode);
-//       }
-//     } else if (isJSXEmpty(child) && isJSXEmpty(nextChild)) {
-//       // do nothing
-//     } else if (isSameJSXType(child, nextChild)) {
-//       cur.update(nextChild);
-//       if (childNode) {
-//         currentNodeIndex++;
-//       }
-//     } else {
-//       // now we need to replace the child
-//       cur.unmount();
-
-//       const next = new VNode(nextChild);
-//       next.parent = vnode;
-//       next.nextSibling = cur.nextSibling;
-
-//       if (pre) {
-//         pre.nextSibling = next;
-//       } else {
-//         vnode.child = next;
-//       }
-
-//       const nextChildNode = next.mount();
-//       if (nextChildNode) {
-//         if (childNode) {
-//           node.replaceChild(nextChildNode, childNode);
-//         } else {
-//           if (currentNodeIndex >= node.childNodes.length) {
-//             node.appendChild(nextChildNode);
-//           } else {
-//             node.insertBefore(nextChildNode, node.childNodes[currentNodeIndex]);
-//           }
-//         }
-//         currentNodeIndex++;
-//       } else if (childNode) {
-//         node.removeChild(childNode);
-//       }
-
-//       cur = next;
-//     }
-
-//     pre = cur;
-//     cur = cur.nextSibling;
-//     i++;
-//   }
-
-//   // append new nodes
-//   while (i < nextChildren.length) {
-//     const next = new VNode(nextChildren[i]);
-//     next.parent = vnode;
-
-//     if (pre) {
-//       pre.nextSibling = next;
-//     } else {
-//       vnode.child = next;
-//     }
-
-//     const nextChildNode = next.mount();
-//     if (nextChildNode) {
-//       node.appendChild(nextChildNode);
-//     }
-
-//     pre = next;
-//     i++;
-//   }
-// }

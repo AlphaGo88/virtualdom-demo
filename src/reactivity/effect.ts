@@ -44,7 +44,6 @@ export class ReactiveEffect implements Effect {
 
   run() {
     let lastEffect = activeEffect;
-
     try {
       activeEffect = this;
       this.deps.forEach((dep) => {

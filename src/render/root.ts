@@ -24,10 +24,8 @@ class VDOMRoot implements Root {
 
   render(element: JSXNode) {
     let { containerEl, rootVNode } = this;
-
     if (!rootVNode) {
       const rootElement = createJSXElement('_vdom_root', null, null, {});
-
       rootVNode = createVNode(rootElement);
       rootVNode.node = containerEl;
       this.rootVNode = rootVNode;
@@ -37,7 +35,6 @@ class VDOMRoot implements Root {
       updateVNode(rootVNode.child, element);
     } else {
       const vnode = createVNode(element);
-
       rootVNode.child = vnode;
       vnode.parent = rootVNode;
       containerEl.innerHTML = '';

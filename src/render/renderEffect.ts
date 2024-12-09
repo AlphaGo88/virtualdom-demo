@@ -1,7 +1,11 @@
-import { activeEffect, setActiveEffect, Effect } from 'vdom/reactivity/effect';
-import { Dep } from 'vdom/reactivity/dep';
-import { updateChildren, VNode } from './vnode';
-import { ComponentInstance } from './component';
+import {
+  type Effect,
+  activeEffect,
+  setActiveEffect,
+} from 'vdom/reactivity/effect';
+import type { Dep } from 'vdom/reactivity/dep';
+import type { ComponentInstance } from './component';
+import { type VNode, updateChildren } from './vnode';
 
 export class RenderEffect implements Effect {
   isRender: boolean = true;
@@ -17,7 +21,6 @@ export class RenderEffect implements Effect {
   run() {
     const { componentInstance, vnode } = this;
     let lastEffect = activeEffect;
-
     try {
       setActiveEffect(this);
       this.deps.forEach((dep) => {
@@ -26,7 +29,7 @@ export class RenderEffect implements Effect {
       const renderedElement = componentInstance.render();
       setActiveEffect(lastEffect);
       if (vnode.child) {
-        updateChildren(vnode, vnode.child.element, renderedElement);
+        updateChildren(vnode, renderedElement);
       }
       return renderedElement;
     } catch {

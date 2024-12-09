@@ -1,7 +1,7 @@
 import { Props } from 'vdom/shared/types';
 import { isString, isPlainObject, hasChanged, hasOwn } from 'vdom/shared/utils';
 import { type Effect, activeEffect } from 'vdom/reactivity/effect';
-import { createDep, Dep } from 'vdom/reactivity/dep';
+import { type Dep, createDep } from 'vdom/reactivity/dep';
 import { currentSetupInstance } from './component';
 
 const RAW = Symbol();

@@ -63,7 +63,8 @@ function setProp(
       break;
 
     case 'onClick':
-      return setValueForEventListener(el, 'onClick', value, prevValue);
+      setValueForEventListener(el, 'onClick', value, prevValue);
+      break;
 
     // We polyfill it separately on the client during commit.
     case 'autofocus':

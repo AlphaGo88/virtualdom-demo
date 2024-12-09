@@ -59,7 +59,6 @@ function toRaw(observed: any) {
 
 function hasOwnProperty(this: object, key: unknown) {
   const raw = toRaw(this);
-
   if (isTrackable(raw, key)) {
     track(raw, String(key));
   }
