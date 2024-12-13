@@ -27,8 +27,8 @@ class BaseComponent implements ComponentInstance {
   static $$typeof = COMPONENT_TYPE;
 
   props: Props = {};
-  protected mountCallbacks: (() => void)[] | null = null;
-  protected unmountCallbacks: (() => void)[] | null = null;
+  mountCallbacks?: (() => void)[];
+  unmountCallbacks?: (() => void)[];
 
   // will be rewritten after calling setup function
   render: () => JSXNode = () => null;
@@ -56,7 +56,7 @@ class BaseComponent implements ComponentInstance {
   mount() {
     const callbacks = this.mountCallbacks;
     if (callbacks) {
-      this.mountCallbacks = null;
+      this.mountCallbacks = undefined;
       callbacks.forEach((cb) => cb());
     }
   }
@@ -64,7 +64,7 @@ class BaseComponent implements ComponentInstance {
   unmount() {
     const callbacks = this.unmountCallbacks;
     if (callbacks) {
-      this.unmountCallbacks = null;
+      this.unmountCallbacks = undefined;
       callbacks.forEach((cb) => cb());
     }
   }

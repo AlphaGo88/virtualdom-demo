@@ -15,12 +15,9 @@ export interface Root {
 }
 
 class VDOMRoot implements Root {
-  private containerEl: Element;
   private rootVNode: VNode | null = null;
 
-  constructor(container: Element) {
-    this.containerEl = container;
-  }
+  constructor(private containerEl: Element) {}
 
   render(element: JSXNode) {
     let { containerEl, rootVNode } = this;

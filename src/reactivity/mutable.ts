@@ -22,7 +22,6 @@ function createArrayInstrumentations() {
       const arr = toRaw(this) as any;
       // we run the method using the original args first (which may be reactive)
       const res = arr[key](...args);
-
       if (res === -1 || res === false) {
         // if that didn't work, run it again using raw values.
         return arr[key](...args.map(toRaw));
@@ -102,10 +101,6 @@ function createMutable<T extends object>(obj: T, deep = true) {
         return target;
       }
 
-      if (isArray(target)) {
-        console.log('get', key);
-      }
-
       if (isArray(target) && hasOwn(arrayInstrumentations, key)) {
         return Reflect.get(arrayInstrumentations, key, receiver);
       }
@@ -132,10 +127,6 @@ function createMutable<T extends object>(obj: T, deep = true) {
           : hasOwn(target, key);
       const result = Reflect.set(target, key, value, receiver);
 
-      if (isArray(target)) {
-        console.log('set', key, oldValue, value);
-      }
-
       if (proxy === receiver) {
         if (!hadKey) {
           trigger(target, TriggerTypes.ADD, key, value);
@@ -157,9 +148,6 @@ function createMutable<T extends object>(obj: T, deep = true) {
       const hadKey = hasOwn(target, key);
       const result = Reflect.deleteProperty(target, key);
 
-      if (isArray(target)) {
-        console.log('delete', key);
-      }
       if (result && hadKey) {
         trigger(target, TriggerTypes.DELETE, key, undefined);
       }

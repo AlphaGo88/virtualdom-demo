@@ -11,7 +11,6 @@ const RESERVED_PROPS = {
 function hasValidRef(config: Props) {
   if (hasOwn(config, 'ref')) {
     const { ref } = config;
-
     if (isPlainObject(ref) && hasOwn(ref, 'value')) {
       return true;
     }

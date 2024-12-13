@@ -57,7 +57,6 @@ export function mountVNode(
   anchor: Node | null = null
 ) {
   let { element } = vnode;
-
   if (isJSXEmpty(element)) {
     // do nothing
   } else if (isJSXPortal(element)) {
@@ -76,7 +75,6 @@ export function mountVNode(
 
 export function unmountVNode(vnode: VNode, needRemove: boolean) {
   const { element, componentInstance, node, child } = vnode;
-
   if (componentInstance) {
     componentInstance.unmount();
   } else if (isJSXPortal(element)) {
@@ -157,6 +155,7 @@ function mountComponentVNode(
   const renderedVNode = createVNode(renderEffect.run());
   vnode.child = renderedVNode;
   renderedVNode.parent = vnode;
+
   mountVNode(renderedVNode, parent, anchor);
   // trigger 'mount' after the dom node is created
   componentInstance.mount();
@@ -169,7 +168,6 @@ function mountTextVNode(
 ) {
   const text = '' + vnode.element;
   vnode.element = text;
-
   const node = createText(text);
   vnode.node = node;
   insertNode(node, parent, anchor);
@@ -184,7 +182,6 @@ export function mountChildren(
   if (!isArray(children)) {
     children = [children];
   }
-
   let cur: VNode;
   let pre: VNode | null = null;
   children.forEach((child) => {
@@ -212,7 +209,6 @@ function unmountChildren(vnode: VNode, needRemove: boolean) {
 function updatePortalVNode(vnode: VNode, nextElement: JSXPortal) {
   const { container } = vnode.element as JSXPortal;
   const { children: nextChildren, container: nextContainer } = nextElement;
-
   if (container !== nextContainer) {
     // If the container is changed, we need to rebuild the portal.
     unmountChildren(vnode, true);
@@ -227,7 +223,6 @@ function updateElementVNode(vnode: VNode, nextElement: JSXElement) {
   const { element, node } = vnode;
   const { props } = element as JSXElement;
   const { props: nextProps } = nextElement;
-
   vnode.element = nextElement;
   if (node) {
     setProps(node as Element, nextProps, props);
@@ -268,6 +263,7 @@ export function updateChildren(
   if (!parentNode) {
     parentNode = findHolderDOMNode(parentVNode);
   }
+
   const tailAnchor =
     parentVNode.node || isJSXPortal(parentVNode.element)
       ? null
@@ -415,6 +411,7 @@ function moveVNode(
     tempArr[to - 1].nextSibling = vnode;
   }
   vnode.nextSibling = tempArr[to + 1];
+
   moveDOMNodeForVNode(
     vnode,
     parentNode,
@@ -486,5 +483,6 @@ function findDOMNode(vnode: VNode): Node | null {
     }
     child = child.nextSibling;
   }
+
   return null;
 }

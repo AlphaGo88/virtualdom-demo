@@ -21,10 +21,6 @@ export enum TriggerTypes {
 
 export function track(target: object, key: string | symbol) {
   if (shouldTrack && activeEffect) {
-    if (isArray(target)) {
-      console.log('track', key);
-    }
-
     let depMap = targetMap.get(target);
     if (!depMap) {
       targetMap.set(target, (depMap = new Map()));
@@ -48,12 +44,8 @@ export function trigger(
   key: string | symbol,
   value: unknown
 ) {
-  console.log('trigger', key);
-
   const depMap = targetMap.get(target);
-  if (!depMap) {
-    return;
-  }
+  if (!depMap) return;
 
   const deps: (Dep | undefined)[] = [depMap.get(key)];
   if (key === 'length' && isArray(target)) {
@@ -90,9 +82,7 @@ export function trigger(
   deps.forEach((dep) => {
     if (dep) {
       dep.forEach((used, effect) => {
-        if (used) {
-          effectsToRun.add(effect);
-        }
+        used && effectsToRun.add(effect);
       });
     }
   });

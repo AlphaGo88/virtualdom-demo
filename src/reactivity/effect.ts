@@ -35,12 +35,9 @@ export function resumeTracking() {
 export class ReactiveEffect implements Effect {
   isRender: boolean = false;
   deps: Dep[] = [];
-  fn: EffectFunction;
   cleanup?: () => void;
 
-  constructor(fn: EffectFunction) {
-    this.fn = fn;
-  }
+  constructor(public fn: EffectFunction) {}
 
   run() {
     let lastEffect = activeEffect;
@@ -77,7 +74,6 @@ export function enqueueEffect(effect: Effect) {
   } else {
     effectQueue.add(effect);
   }
-
   if (!scheduled) {
     schedule();
   }

@@ -45,9 +45,7 @@ export function useState<T>(initialValue: T): [StateGetter<T>, StateSetter<T>] {
       // trigger effects
       if (state.dep) {
         state.dep.forEach((used, effect) => {
-          if (used) {
-            enqueueEffect(effect);
-          }
+          used && enqueueEffect(effect);
         });
       }
     }
